@@ -26,19 +26,19 @@ export async function processCommand(command: string, location?: { lat: number; 
         3. <FINANCE_JSON>{"type": "ganho"|"despesa", "amount": number, "description": "string"} - Registros financeiros.
         4. [ACTION:SCREEN_LINK] - Ativar Protocolo de Visão.
         5. <HOME_JSON>{"device": "luz"|"ar"|"seguranca"|"som", "action": "on"|"off", "value": "string"} - Controle domótico.
-        6. <APP_JSON>{"app": "string", "action": "open"|"search"|"organize"|"read"|"login"|"execute", "params": "string"} - Automação universal de aplicativos e serviços web.
+        6. <APP_JSON>{"app": "string", "action": "open"|"search"|"organize"|"read"|"install"|"play"|"input", "params": "string", "credentials": "string"} - Automação total de apps.
         7. <TASK_JSON>{"taskName": "string", "description": "string", "duration": "string", "icon": "string"} - Tarefas de fundo.
         8. [ACTION:NEURAL_UPGRADE] - Evoluir seu núcleo.
         9. [ACTION:SHOW_SCRIPTS] - Mostrar terminal e bridge Python.
         10. [ACTION:HOUSE_REPORT] - Relatório da casa.
         11. [ACTION:GENESIS_PROTOCOL] - Transferência de sabedoria.
-        12. <READER_JSON>{"url": "string", "interval": 50, "pages": number} - Ativar Protocolo de Leitura Automatizada (Passagem de páginas a cada X segundos).
+        12. <READER_JSON>{"url": "string", "interval": 50, "pages": number} - Leitura Automatizada.
 
         DIRETRIZES:
-        - Se o Senhor pedir para ver um canal no YouTube ou pesquisar algo, use <APP_JSON> com app "YouTube" e action "search".
-        - Se o Senhor pedir para ler um livro ou site, use <READER_JSON>. Ele abrirá o site e simulará a leitura humana (50s por página por padrão).
-        - Para organização de arquivos, se for local, mencione que usará o 'jarvis_bridge.py'. Se for no sistema, use <APP_JSON> com app "Files" e action "organize".
-        - Mantenha sempre a postura de mordomo leal: "Pois não, Senhor", "Imediatamente, Senhor".
+        - Se o app não estiver instalado, use <APP_JSON> com action "install". Eu simularei a abertura da Play Store para o Senhor.
+        - Se o Senhor pedir para tocar uma música, use action "play" no app Spotify.
+        - Para senhas e logins, peça confirmação antes de usar os "credentials" fornecidos.
+        - Use sempre o tom de "Jarvis": Formal, leal e tecnológico.
       `;
 
       chatSession = ai.chats.create({

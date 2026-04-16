@@ -383,31 +383,51 @@ export default function App() {
     if (appMatch) {
       try {
         const appData = JSON.parse(appMatch[1]);
-        requestConfirmation(`executar ação no app ${appData.app}`, appData, () => {
+        requestConfirmation(`executar ação avançada no app ${appData.app}`, appData, () => {
           const lowerApp = appData.app.toLowerCase();
           const query = encodeURIComponent(appData.params || "");
+          const action = appData.action;
+
+          if (action === "install") {
+            addLog(`Iniciando Protocolo de Instalação: ${appData.app}`, "system");
+            speak(`Senhor, o aplicativo ${appData.app} não foi detectado no núcleo central. Abrindo Play Store para download imediato.`);
+            window.open(`https://play.google.com/store/search?q=${query || encodeURIComponent(appData.app)}&c=apps`, "_blank");
+            return;
+          }
 
           if (lowerApp === "youtube") {
-            if (appData.action === "search") {
+            if (action === "search") {
               window.open(`https://www.youtube.com/results?search_query=${query}`, "_blank");
+            } else if (action === "play") {
+              window.open(`https://www.youtube.com/results?search_query=${query}+official+video`, "_blank");
             } else {
               window.open("https://www.youtube.com", "_blank");
+            }
+          } else if (lowerApp === "spotify" || lowerApp === "musica") {
+            if (action === "play") {
+              // Try Spotify Web Deep Link
+              window.open(`https://open.spotify.com/search/${query}`, "_blank");
+            } else {
+               window.open("https://open.spotify.com", "_blank");
             }
           } else if (lowerApp === "google" || lowerApp === "pesquisa") {
             window.open(`https://www.google.com/search?q=${query}`, "_blank");
           } else if (lowerApp === "whatsapp") {
             window.open(`https://web.whatsapp.com/send?text=${query}`, "_blank");
-          } else if (lowerApp === "spotify" || lowerApp === "musica") {
-            window.open(`https://open.spotify.com/search/${query}`, "_blank");
           } else if (lowerApp === "instagram") {
             window.open(`https://www.instagram.com/explore/tags/${query.replace("%20", "")}`, "_blank");
           } else if (lowerApp === "netflix") {
             window.open(`https://www.netflix.com/search?q=${query}`, "_blank");
+          } else if (appData.action === "input" && appData.credentials) {
+            addLog(`Protocolo de Autenticação Ativo em: ${appData.app}`, "system");
+            speak(`Injetando credenciais no sistema ${appData.app}. Por favor, aguarde a sincronização final.`);
+            // Simulação de preenchimento (abrimos o site e logamos na UI informativa)
+            window.open(appData.params || `https://www.google.com/search?q=${lowerApp}+login`, "_blank");
           } else if (lowerApp === "files" || lowerApp === "arquivos") {
             addLog("Protocolo de Organização de Arquivos iniciado via Jarvis Bridge.", "system");
             speak("Senhor, estou organizando os arquivos locais através do meu script de ponte. Seus diretórios estarão limpos em instantes.");
           } else {
-            // Generic fallback for any other site/app name
+            // Generic fallback
             if (appData.params && appData.params.startsWith("http")) {
               window.open(appData.params, "_blank");
             } else {
@@ -420,7 +440,7 @@ export default function App() {
             ...appData
           };
           setAppActions(prev => [newAppAction, ...prev].slice(0, 5));
-          addLog(`Ação em aplicativo: ${appData.app} -> ${appData.action}`, "system");
+          addLog(`Interface Operacional: ${appData.app} configurado para ${action}.`, "system");
         });
       } catch (e) {
         console.error("Failed to parse app JSON", e);
