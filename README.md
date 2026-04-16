@@ -1,32 +1,24 @@
-# JARVIS SENHOR - Guia de Configuração Profissional
+# JARVIS - Centro de Comando Inteligente
 
-Este projeto foi estruturado para funcionar perfeitamente no **Google AI Studio** e na **Vercel**.
+Este projeto foi estruturado para funcionar no **Google AI Studio Build**.
 
-## 🚀 Como colocar Online (Vercel)
+## 🚀 Configuração Rápida
 
-Para que o JARVIS funcione corretamente após o deploy, você **DEVE** configurar a chave de API manualmente por motivos de segurança. Nenhuma ferramenta pode "adivinhar" sua chave secreta automaticamente.
+Para o JARVIS processar comandos, você deve configurar sua chave de API nos **Segredos** do editor.
 
-### 1. Configurar Variáveis de Ambiente
-No painel da Vercel:
-1. Vá em **Settings** -> **Environment Variables**.
-2. Adicione uma nova variável:
-   - **Key:** `GEMINI_API_KEY`
-   - **Value:** (Sua chave obtida no Google AI Studio)
-3. Clique em **Save**.
+### 1. Configurar Chave de API
+1. No painel lateral esquerdo, clique no ícone de **Cadeado (Secrets)** 🔒.
+2. Adicione uma nova chave:
+   - **Nome:** `GEMINI_API_KEY`
+   - **Valor:** (Sua chave obtida em https://aistudio.google.com/app/apikey)
+3. Salve a alteração.
 
-### 2. Realizar Redeploy
-**IMPORTANTE:** Se você adicionou a chave após o primeiro deploy, você deve:
-1. Ir na aba **Deployments**.
-2. Clicar nos três pontos `...` do último deploy.
-3. Selecionar **Redeploy**.
+### 2. Protocolo de Voz
+- No cabeçalho da aplicação, clique em **"VOZ"** para selecionar o perfil vocal que preferir dentre os instalados no seu sistema.
 
-## 🛠️ Estrutura do Projeto
-- `/api`: Contém as funções serverless para a Vercel (Backend seguro).
-- `/src`: Contém o código do Frontend (Interface do Jarvis).
-- `server.ts`: Servidor para desenvolvimento local e Cloud Run.
-
-## 🤖 Por que não é um arquivo .JAR?
-Este projeto é baseado em **Node.js e React** (tecnologia web moderna), e não em Java. Portanto, não existe um arquivo `.jar`. O resultado final é um site otimizado que roda diretamente no navegador.
+### 3. Integração Local (Python)
+- Clique no botão de terminal (ícone de código) no painel de Automação para acessar o script `jarvis_bridge.py`.
+- Execute-o localmente para conectar sua Alexa ou comandos de voz locais ao núcleo central.
 
 ---
-*Gerado automaticamente pelo Protocolo de Assistência JARVIS.*
+*Protocolo de Assistência JARVIS - Inteligência Ativa.*

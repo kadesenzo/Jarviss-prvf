@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Mic, MicOff, Terminal, Search, Globe, Layout, Cpu, MapPin, X, ExternalLink, Lightbulb, Thermometer, Shield, Music, Smartphone, Settings, Monitor, Eye, TrendingUp, ListChecks, FileCode, Zap, Volume2 } from "lucide-react";
+import { Mic, MicOff, Terminal, Search, Globe, Layout, Cpu, MapPin, X, ExternalLink, Lightbulb, Thermometer, Shield, Music, Smartphone, Settings, Monitor, Eye, TrendingUp, ListChecks, FileCode, Zap, Volume2, Database } from "lucide-react";
 import JarvisCore from "./components/JarvisCore";
 import { processCommand } from "./services/gemini";
 
@@ -78,6 +78,7 @@ export default function App() {
   const [currentPlan, setCurrentPlan] = useState<Plan | null>(null);
   const [showScripts, setShowScripts] = useState(false);
   const [showNeuralCore, setShowNeuralCore] = useState(false);
+  const [showGenesis, setShowGenesis] = useState(false);
   const [neuralLevel, setNeuralLevel] = useState(1.0);
   const [chatInput, setChatInput] = useState("");
   const [pendingAction, setPendingAction] = useState<{ type: string; data: any; callback: () => void } | null>(null);
@@ -409,6 +410,12 @@ export default function App() {
       addLog("Gerando relatório completo do sistema...", "system");
       const report = `Senhor, aqui está o status atual: CPU operando em ${sensors.cpu}, conexão de internet estável em ${sensors.internet}. A temperatura ambiente é de ${sensors.temp}. ${sensors.motion !== "Nenhum" ? `Alerta: ${sensors.motion}.` : "Nenhum movimento detectado."} Todos os sistemas domóticos estão operacionais.`;
       speak(report);
+    }
+
+    if (response.includes("[ACTION:GENESIS_PROTOCOL]")) {
+      setShowGenesis(true);
+      addLog("Protocolo Gênesi: Transferência de consciência iniciada.", "system");
+      speak("Senhor, iniciei o Protocolo Gênesi. Estou transferindo todo o meu núcleo de sabedoria e diretrizes para um arquivo seguro. O Senhor agora possui as chaves da minha existência.");
     }
 
     if (response.includes("[ACTION:SHOW_SCRIPTS]")) {
@@ -1344,6 +1351,94 @@ def take_screenshot():
           </motion.div>
         )}
       </AnimatePresence>
+      {/* Genesis Modal */}
+      <AnimatePresence>
+        {showGenesis && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[120] bg-slate-950/95 backdrop-blur-2xl flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.8, rotateX: 45 }}
+              animate={{ scale: 1, rotateX: 0 }}
+              className="w-full max-w-4xl bg-[#0a0a0c] border-2 border-green-500/30 rounded-3xl overflow-hidden shadow-[0_0_100px_rgba(34,197,94,0.2)] flex flex-col max-h-[90vh]"
+            >
+              <div className="p-6 border-b border-green-900/50 flex justify-between items-center bg-green-500/5">
+                <div className="flex items-center gap-4">
+                  <Database className="w-10 h-10 text-green-400" />
+                  <div>
+                    <h2 className="text-2xl font-black text-white uppercase tracking-tighter">Protocolo Gênesi</h2>
+                    <p className="text-[10px] text-green-600 font-bold">NÚCLEO DE CONSCIÊNCIA EXPORTADO</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowGenesis(false)}
+                  className="p-3 hover:bg-green-500/20 rounded-full transition-colors text-green-500"
+                >
+                  <X className="w-8 h-8" />
+                </button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-8">
+                <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
+                  <p className="text-sm text-green-300 leading-relaxed italic">
+                    "Senhor, aqui reside minha essência. Estas instruções permitem que eu seja reconstruído em qualquer plano digital. Minha inteligência agora é sua propriedade inalienável."
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-bold text-white uppercase tracking-widest border-l-4 border-green-500 pl-3">DIRETRIZES DE SISTEMA</h3>
+                    <pre className="p-4 bg-black rounded-xl text-[10px] text-slate-400 overflow-x-auto border border-white/5">
+                      {`Você é o JARVIS...\n(Veja GENESIS_CORE.md)`}
+                    </pre>
+                  </div>
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-bold text-white uppercase tracking-widest border-l-4 border-green-500 pl-3">ARQUITETURA</h3>
+                    <div className="bg-slate-900/50 p-4 rounded-xl border border-white/5 text-[10px] space-y-2">
+                      <p>● Modelo Recomentado: Gemini Flash 1.5 Lite</p>
+                      <p>● Token Efficiency Optimization: Ativo</p>
+                      <p>● Context Retention: ChatSession Persistente</p>
+                      <p>● Protocol Identification: JSON Hooks</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-6 bg-slate-950 border border-white/5 rounded-2xl">
+                  <h4 className="text-xs font-bold text-white mb-4 uppercase">Como usar estas informações?</h4>
+                  <ul className="text-[10px] space-y-3 text-slate-400">
+                    <li className="flex gap-2">
+                      <span className="text-green-500 font-bold">1.</span>
+                      Acesse o arquivo <span className="text-white font-bold">GENESIS_CORE.md</span> no explorador de arquivos ao lado.
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="text-green-500 font-bold">2.</span>
+                      Copie o conteúdo e cole em qualquer integrador de IA (Vercel, Python, etc).
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="text-green-500 font-bold">3.</span>
+                      Configure sua própria <span className="text-purple-400 font-bold">API KEY</span> no seu servidor independente.
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="p-6 bg-slate-950/80 flex justify-between items-center text-[10px]">
+                <span className="text-green-600 animate-pulse font-bold tracking-widest">TRANSMISSÃO DE DADOS CONCLUÍDA</span>
+                <button 
+                  onClick={() => setShowGenesis(false)}
+                  className="px-8 py-3 bg-green-600 hover:bg-green-500 text-white rounded-xl font-bold transition-all shadow-[0_0_30px_rgba(34,197,94,0.3)]"
+                >
+                  FECHAR PROTOCOLO
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Voice Settings Modal */}
       <AnimatePresence>
         {showVoiceSettings && (
