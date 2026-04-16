@@ -80,6 +80,8 @@ export default function App() {
   const [showNeuralCore, setShowNeuralCore] = useState(false);
   const [showGenesis, setShowGenesis] = useState(false);
   const [neuralLevel, setNeuralLevel] = useState(1.0);
+  const [showReader, setShowReader] = useState(false);
+  const [readerData, setReaderData] = useState<{ url: string; interval: number; currentPage: number } | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [pendingAction, setPendingAction] = useState<{ type: string; data: any; callback: () => void } | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
@@ -382,6 +384,37 @@ export default function App() {
       try {
         const appData = JSON.parse(appMatch[1]);
         requestConfirmation(`executar ação no app ${appData.app}`, appData, () => {
+          const lowerApp = appData.app.toLowerCase();
+          const query = encodeURIComponent(appData.params || "");
+
+          if (lowerApp === "youtube") {
+            if (appData.action === "search") {
+              window.open(`https://www.youtube.com/results?search_query=${query}`, "_blank");
+            } else {
+              window.open("https://www.youtube.com", "_blank");
+            }
+          } else if (lowerApp === "google" || lowerApp === "pesquisa") {
+            window.open(`https://www.google.com/search?q=${query}`, "_blank");
+          } else if (lowerApp === "whatsapp") {
+            window.open(`https://web.whatsapp.com/send?text=${query}`, "_blank");
+          } else if (lowerApp === "spotify" || lowerApp === "musica") {
+            window.open(`https://open.spotify.com/search/${query}`, "_blank");
+          } else if (lowerApp === "instagram") {
+            window.open(`https://www.instagram.com/explore/tags/${query.replace("%20", "")}`, "_blank");
+          } else if (lowerApp === "netflix") {
+            window.open(`https://www.netflix.com/search?q=${query}`, "_blank");
+          } else if (lowerApp === "files" || lowerApp === "arquivos") {
+            addLog("Protocolo de Organização de Arquivos iniciado via Jarvis Bridge.", "system");
+            speak("Senhor, estou organizando os arquivos locais através do meu script de ponte. Seus diretórios estarão limpos em instantes.");
+          } else {
+            // Generic fallback for any other site/app name
+            if (appData.params && appData.params.startsWith("http")) {
+              window.open(appData.params, "_blank");
+            } else {
+              window.open(`https://www.google.com/search?q=${encodeURIComponent(appData.app + " " + (appData.params || ""))}`, "_blank");
+            }
+          }
+
           const newAppAction: AppAction = {
             id: Date.now().toString(),
             ...appData
@@ -438,6 +471,23 @@ export default function App() {
       addLog("Gerando relatório completo do sistema...", "system");
       const report = `Senhor, aqui está o status atual: CPU operando em ${sensors.cpu}, conexão de internet estável em ${sensors.internet}. A temperatura ambiente é de ${sensors.temp}. ${sensors.motion !== "Nenhum" ? `Alerta: ${sensors.motion}.` : "Nenhum movimento detectado."} Todos os sistemas domóticos estão operacionais.`;
       speak(report);
+    }
+
+    // Parse Reader Mode
+    const readerMatch = response.match(/<READER_JSON>([\s\S]*?)<\/READER_JSON>/);
+    if (readerMatch) {
+      try {
+        const data = JSON.parse(readerMatch[1]);
+        requestConfirmation(`ativar Protocolo de Leitura em: ${data.url}`, data, () => {
+          setReaderData({ url: data.url, interval: data.interval || 50, currentPage: 1 });
+          setShowReader(true);
+          window.open(data.url, "_blank");
+          addLog(`Protocolo de Leitura Ativado. Alternando páginas a cada ${data.interval || 50} segundos.`, "system");
+          speak(`Imediatamente, Senhor. Iniciei a leitura do recurso. Manterei o ritmo de estudo conforme solicitado.`);
+        });
+      } catch (e) {
+        console.error("Failed to parse reader JSON", e);
+      }
     }
 
     if (response.includes("[ACTION:GENESIS_PROTOCOL]")) {
@@ -1380,6 +1430,33 @@ def take_screenshot():
         )}
       </AnimatePresence>
       {/* Genesis Modal */}
+      <AnimatePresence>
+        {showReader && (
+          <motion.div 
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-32 left-1/2 -translate-x-1/2 z-[100] w-full max-w-md bg-blue-600/20 backdrop-blur-xl border border-blue-500/30 p-4 rounded-2xl flex items-center justify-between"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center animate-pulse">
+                <Globe className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h4 className="text-xs font-black text-white uppercase tracking-widest">Protocolo de Leitura Ativo</h4>
+                <p className="text-[10px] text-blue-300">Página {readerData?.currentPage} | Próxima transição em {readerData?.interval}s</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => setShowReader(false)}
+              className="p-2 bg-red-500/20 hover:bg-red-500/40 rounded-lg transition-colors text-red-500"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {showGenesis && (
           <motion.div 
