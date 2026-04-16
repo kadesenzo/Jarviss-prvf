@@ -1,6 +1,13 @@
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+let apiKey = "";
+try {
+  apiKey = process.env.GEMINI_API_KEY || "";
+} catch (e) {
+  console.warn("process.env.GEMINI_API_KEY not found, trying import.meta.env");
+}
+
+const ai = new GoogleGenAI({ apiKey });
 
 // Persistent chat session
 let chatSession: any = null;
