@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Mic, MicOff, Terminal, Search, Globe, Layout, Cpu, MapPin, X, ExternalLink, Lightbulb, Thermometer, Shield, Music, Smartphone, Settings, Monitor, Eye, TrendingUp, ListChecks, FileCode, Zap, Volume2, Database } from "lucide-react";
+import { Mic, MicOff, Terminal, Search, Globe, Layout, Cpu, MapPin, X, ExternalLink, Lightbulb, Thermometer, Shield, Music, Smartphone, Settings, Monitor, Eye, TrendingUp, ListChecks, FileCode, Zap, Volume2, Database, ShieldCheck } from "lucide-react";
 import JarvisCore from "./components/JarvisCore";
 import { processCommand } from "./services/gemini";
 
@@ -81,6 +81,7 @@ export default function App() {
   const [showGenesis, setShowGenesis] = useState(false);
   const [neuralLevel, setNeuralLevel] = useState(1.0);
   const [showReader, setShowReader] = useState(false);
+  const [activeMission, setActiveMission] = useState<{ title: string; steps: string[]; currentStep: number } | null>(null);
   const [readerData, setReaderData] = useState<{ url: string; interval: number; currentPage: number } | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [pendingAction, setPendingAction] = useState<{ type: string; data: any; callback: () => void } | null>(null);
@@ -448,6 +449,34 @@ export default function App() {
     }
 
     // Parse Automation Task
+    const missionMatch = response.match(/<MISSION_JSON>([\s\S]*?)<\/MISSION_JSON>/);
+    if (missionMatch) {
+      try {
+        const data = JSON.parse(missionMatch[1]);
+        addLog(`Protocolo de Missão Iniciado: ${data.title}`, "system");
+        setActiveMission({ ...data, currentStep: 0 });
+        speak(`Senhor, uma nova missão foi traçada: ${data.title}. Estou executando os protocolos sequencialmente. Não se preocupe, eu assumo o controle daqui.`);
+        
+        let stepIndex = 0;
+        const interval = setInterval(() => {
+          if (stepIndex < data.steps.length) {
+            addLog(`Progresso Missão: ${data.steps[stepIndex]}`, "system");
+            stepIndex++;
+            setActiveMission(prev => prev ? { ...prev, currentStep: stepIndex } : null);
+          } else {
+            clearInterval(interval);
+            setTimeout(() => {
+              setActiveMission(null);
+              addLog(`Missão ${data.title} concluída com sucesso.`, "system");
+              speak(`Senhor, a missão ${data.title} foi finalizada. O que mais deseja que eu gerencie?`);
+            }, 2000);
+          }
+        }, 3000);
+      } catch (e) {
+        console.error("Failed to parse mission JSON", e);
+      }
+    }
+
     const taskMatch = response.match(/<TASK_JSON>([\s\S]*?)<\/TASK_JSON>/);
     if (taskMatch) {
       try {
@@ -1450,6 +1479,33 @@ def take_screenshot():
         )}
       </AnimatePresence>
       {/* Genesis Modal */}
+      <AnimatePresence>
+        {activeMission && (
+          <motion.div 
+            initial={{ x: 300, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 300, opacity: 0 }}
+            className="fixed top-24 right-6 z-[100] w-72 bg-emerald-600/20 backdrop-blur-xl border border-emerald-500/30 p-4 rounded-2xl"
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center animate-pulse">
+                <ShieldCheck className="w-5 h-5 text-white" />
+              </div>
+              <h4 className="text-[10px] font-black text-white uppercase tracking-widest leading-none">Status da Missão</h4>
+            </div>
+            <h3 className="text-sm font-bold text-white mb-2">{activeMission.title}</h3>
+            <div className="space-y-2">
+              {activeMission.steps.map((step, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <div className={`w-1.5 h-1.5 rounded-full ${idx < activeMission.currentStep ? 'bg-emerald-500' : idx === activeMission.currentStep ? 'bg-white animate-ping' : 'bg-white/20'}`} />
+                  <span className={`text-[10px] ${idx === activeMission.currentStep ? 'text-white font-bold' : 'text-emerald-300/50'}`}>{step}</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {showReader && (
           <motion.div 
