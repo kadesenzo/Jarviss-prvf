@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Mic, MicOff, Terminal, Search, Globe, Layout, Cpu, MapPin, X, ExternalLink, Lightbulb, Thermometer, Shield, Music, Smartphone, Settings, Monitor, Eye, TrendingUp, ListChecks, FileCode } from "lucide-react";
+import { Mic, MicOff, Terminal, Search, Globe, Layout, Cpu, MapPin, X, ExternalLink, Lightbulb, Thermometer, Shield, Music, Smartphone, Settings, Monitor, Eye, TrendingUp, ListChecks, FileCode, Zap, Volume2 } from "lucide-react";
 import JarvisCore from "./components/JarvisCore";
 import { processCommand } from "./services/gemini";
 
@@ -82,6 +82,15 @@ export default function App() {
   const [chatInput, setChatInput] = useState("");
   const [pendingAction, setPendingAction] = useState<{ type: string; data: any; callback: () => void } | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+  const [sensors, setSensors] = useState({
+    cpu: "12%",
+    internet: "285 Mbps",
+    temp: "24.5°C",
+    motion: "Nenhum"
+  });
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
+  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   
   const recognitionRef = useRef<any>(null);
@@ -94,6 +103,14 @@ export default function App() {
         ...task,
         progress: task.progress < 100 ? task.progress + Math.random() * 5 : 0
       })));
+
+      // Simulate sensor fluctuations
+      setSensors(prev => ({
+        cpu: `${Math.floor(Math.random() * 20 + 5)}%`,
+        internet: `${Math.floor(Math.random() * 50 + 250)} Mbps`,
+        temp: `${(24 + Math.random()).toFixed(1)}°C`,
+        motion: Math.random() > 0.9 ? "Detectado no Corredor" : "Nenhum"
+      }));
     }, 3000);
     return () => clearInterval(interval);
   }, []);
@@ -135,6 +152,27 @@ export default function App() {
         setApiStatus({ configured: false });
         addLog("Erro ao conectar com o servidor de comando.", "system");
       });
+
+    // Voice setup
+    const updateVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      const ptVoices = voices.filter(v => v.lang.startsWith("pt"));
+      setAvailableVoices(ptVoices.length > 0 ? ptVoices : voices);
+      
+      // Prefer a male-sounding or high-quality PT-BR voice if it's the first time
+      if (!selectedVoice && ptVoices.length > 0) {
+        const preferred = ptVoices.find(v => 
+          v.name.toLowerCase().includes("google") || 
+          v.name.toLowerCase().includes("male") ||
+          v.name.toLowerCase().includes("daniel") ||
+          v.name.toLowerCase().includes("ricardo")
+        ) || ptVoices[0];
+        setSelectedVoice(preferred);
+      }
+    };
+
+    updateVoices();
+    window.speechSynthesis.onvoiceschanged = updateVoices;
 
     addLog("Protocolo Jarvis ativo. Bem-vindo de volta, Criador.", "system");
   }, []);
@@ -218,14 +256,17 @@ export default function App() {
   }, [screenStream]);
 
   const addLog = (text: string, type: "user" | "jarvis" | "system") => {
-    setLogs(prev => [{ id: Date.now() + Math.random(), text, type }, ...prev].slice(0, 10));
+    setLogs(prev => [{ id: Date.now() + Math.random(), text, type }, ...prev].slice(0, 50));
   };
 
   const speak = (text: string) => {
     if (!synthRef.current) return;
     setIsSpeaking(true);
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "pt-BR";
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+    }
+    utterance.lang = selectedVoice?.lang || "pt-BR";
     utterance.onend = () => setIsSpeaking(false);
     synthRef.current.speak(utterance);
   };
@@ -252,7 +293,8 @@ export default function App() {
     addLog(transcript, "user");
     setStatus("PROCESSANDO...");
     
-    const response = await processCommand(transcript, location || undefined);
+    const sensorContext = `[SENSORES: CPU ${sensors.cpu}, Internet ${sensors.internet}, Temp ${sensors.temp}, Movimento ${sensors.motion}]`;
+    const response = await processCommand(`${sensorContext} ${transcript}`, location || undefined);
     
     // Helper for confirmation
     const requestConfirmation = (type: string, data: any, callback: () => void) => {
@@ -361,6 +403,12 @@ export default function App() {
       requestConfirmation("vincular sua tela ao meu sistema", null, () => {
         startScreenLink();
       });
+    }
+
+    if (response.includes("[ACTION:HOUSE_REPORT]")) {
+      addLog("Gerando relatório completo do sistema...", "system");
+      const report = `Senhor, aqui está o status atual: CPU operando em ${sensors.cpu}, conexão de internet estável em ${sensors.internet}. A temperatura ambiente é de ${sensors.temp}. ${sensors.motion !== "Nenhum" ? `Alerta: ${sensors.motion}.` : "Nenhum movimento detectado."} Todos os sistemas domóticos estão operacionais.`;
+      speak(report);
     }
 
     if (response.includes("[ACTION:SHOW_SCRIPTS]")) {
@@ -490,6 +538,15 @@ export default function App() {
             )}
           </div>
           <div className="flex items-center gap-2 text-[10px] opacity-70">
+            <Volume2 className={`w-3 h-3 ${selectedVoice ? "text-blue-500" : "text-slate-500"}`} />
+            <button 
+              onClick={() => setShowVoiceSettings(true)}
+              className="hover:text-white transition-colors uppercase font-bold"
+            >
+              Voz: {selectedVoice ? selectedVoice.name.split(' ')[0] : "Padrão"}
+            </button>
+          </div>
+          <div className="flex items-center gap-2 text-[10px] opacity-70">
             <MapPin className={`w-3 h-3 ${location ? "text-green-500" : "text-red-500"}`} />
             <span>{location ? `${location.lat.toFixed(2)}, ${location.lng.toFixed(2)}` : "GPS OFFLINE"}</span>
           </div>
@@ -584,6 +641,28 @@ export default function App() {
 
         {/* Center: Jarvis Core */}
         <section className="flex flex-col items-center justify-center gap-8 py-8 lg:py-0">
+          {/* Sensor HUD */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 w-full max-w-2xl mb-4">
+            {[
+              { label: "CPU", value: sensors.cpu, icon: Cpu, color: "text-blue-400" },
+              { label: "NET", value: sensors.internet, icon: Zap, color: "text-yellow-400" },
+              { label: "TEMP", value: sensors.temp, icon: Thermometer, color: "text-orange-400" },
+              { label: "MOV", value: sensors.motion, icon: Eye, color: sensors.motion !== "Nenhum" ? "text-red-500 animate-pulse" : "text-green-400" },
+            ].map((s, i) => (
+              <motion.div 
+                key={i}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1 }}
+                className="bg-slate-900/50 border border-purple-500/20 p-3 rounded-xl flex flex-col items-center gap-1 backdrop-blur-sm"
+              >
+                <s.icon className={`w-4 h-4 ${s.color}`} />
+                <span className="text-[8px] uppercase tracking-widest opacity-50">{s.label}</span>
+                <span className="text-xs font-bold">{s.value}</span>
+              </motion.div>
+            ))}
+          </div>
+
           <JarvisCore isListening={isListening} isSpeaking={isSpeaking} />
           
           <div className="flex flex-col items-center gap-4">
@@ -1099,34 +1178,35 @@ export default function App() {
                 </div>
                 <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
                   <div className="space-y-4">
-                    <h4 className="text-purple-400 font-bold text-xs uppercase tracking-widest">1. main.py (Núcleo de Controle)</h4>
+                    <h4 className="text-purple-400 font-bold text-xs uppercase tracking-widest">1. jarvis_bridge.py (Alexa + Jarvis)</h4>
                     <div className="bg-slate-950 rounded-lg p-4 border border-purple-900/30">
                       <pre className="text-[10px] text-purple-700 leading-relaxed">
-{`import speech_recognition as sr
-import pyttsx3
+{`# Protocolo de Integração Alexa + Jarvis
 import requests
+import time
+from flask import Flask, request, jsonify
 
-def listen():
-    r = sr.Recognizer()
-    with sr.Microphone() as source:
-        print("Jarvis ouvindo...")
-        audio = r.listen(source)
-    try:
-        return r.recognize_google(audio, language='pt-BR')
-    except:
-        return ""
+app = Flask(__name__)
 
-def speak(text):
-    engine = pyttsx3.init()
-    engine.say(text)
-    engine.runAndWait()
+# URL do seu JARVIS no AI Studio
+JARVIS_URL = "https://seu-app-ai-studio.run.app/api/command"
 
-while True:
-    command = listen()
-    if "jarvis" in command.lower():
-        # Envia para o servidor central (este app)
-        response = requests.post("https://seu-app.vercel.app/api/command", json={"command": command})
-        speak(response.json()["text"])`}
+@app.route('/alexa', methods=['POST'])
+def alexa_trigger():
+    data = request.json
+    command = data.get("command", "")
+    
+    print(f"[*] Alexa recebeu: {command}")
+    print("[*] Encaminhando para o Núcleo Jarvis...")
+    
+    response = requests.post(JARVIS_URL, json={"command": command})
+    jarvis_text = response.json().get("text", "Erro de conexão.")
+    
+    return jsonify({"response": jarvis_text})
+
+if __name__ == "__main__":
+    # Use ngrok para expor esta porta para a Alexa
+    app.run(port=5000)`}
                       </pre>
                     </div>
                   </div>
@@ -1214,32 +1294,32 @@ def take_screenshot():
               <div className="space-y-6">
                 <div className="p-4 bg-slate-900/50 border border-purple-500/20 rounded-xl">
                   <p className="text-sm text-slate-300 leading-relaxed mb-4">
-                    Senhor, detectei que meus sistemas de inteligência estão offline. A <span className="text-purple-400 font-bold">GEMINI_API_KEY</span> não foi configurada corretamente no ambiente de produção.
+                    Senhor, detectei que meus sistemas de inteligência estão offline. A <span className="text-purple-400 font-bold">GEMINI_API_KEY</span> não foi configurada nos Segredos do AI Studio.
                   </p>
                   
                   <div className="space-y-4">
                     <div className="flex gap-3">
                       <div className="w-6 h-6 bg-purple-500/20 rounded flex items-center justify-center text-[10px] font-bold text-purple-400 border border-purple-500/30">1</div>
                       <p className="text-xs text-slate-400 flex-1">
-                        Acesse o painel da <span className="text-white font-bold">Vercel</span> (ou sua plataforma de hospedagem).
+                        Clique no ícone de <span className="text-white font-bold">Cadeado (Secrets)</span> 🔒 no painel lateral esquerdo.
                       </p>
                     </div>
                     <div className="flex gap-3">
                       <div className="w-6 h-6 bg-purple-500/20 rounded flex items-center justify-center text-[10px] font-bold text-purple-400 border border-purple-500/30">2</div>
                       <p className="text-xs text-slate-400 flex-1">
-                        Vá em <span className="text-white font-bold">Settings → Environment Variables</span>.
+                        Adicione uma nova chave chamada <code className="bg-slate-950 px-1 rounded text-purple-400">GEMINI_API_KEY</code>.
                       </p>
                     </div>
                     <div className="flex gap-3">
                       <div className="w-6 h-6 bg-purple-500/20 rounded flex items-center justify-center text-[10px] font-bold text-purple-400 border border-purple-500/30">3</div>
                       <p className="text-xs text-slate-400 flex-1">
-                        Adicione a chave <code className="bg-slate-950 px-1 rounded text-purple-400">GEMINI_API_KEY</code> com o valor obtido no Google AI Studio.
+                        Cole o valor da sua chave obtida no Google AI Studio e salve.
                       </p>
                     </div>
                     <div className="flex gap-3">
                       <div className="w-6 h-6 bg-purple-500/20 rounded flex items-center justify-center text-[10px] font-bold text-purple-400 border border-purple-500/30">4</div>
                       <p className="text-xs text-slate-400 flex-1">
-                        <span className="text-red-400 font-bold uppercase">Importante:</span> Realize um <span className="text-white font-bold">Redeploy</span> do projeto para que a Vercel reconheça a nova variável.
+                        <span className="text-green-400 font-bold uppercase">Pronto:</span> O sistema deve reconhecer a chave automaticamente em instantes.
                       </p>
                     </div>
                   </div>
@@ -1259,6 +1339,75 @@ def take_screenshot():
                     ENTENDIDO, SENHOR
                   </button>
                 </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* Voice Settings Modal */}
+      <AnimatePresence>
+        {showVoiceSettings && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4 lg:p-12"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="w-full max-w-lg bg-slate-900 border border-blue-500/30 rounded-2xl overflow-hidden flex flex-col shadow-[0_0_100px_rgba(59,130,246,0.2)]"
+            >
+              <div className="p-4 border-b border-blue-900/50 flex justify-between items-center bg-slate-950/50">
+                <div className="flex items-center gap-3">
+                  <Volume2 className="w-6 h-6 text-blue-400" />
+                  <div>
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-white">Configurações de Voz</h3>
+                    <p className="text-[10px] text-blue-600">MÓDULO DE SÍNTESE VOCAL</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowVoiceSettings(false)}
+                  className="p-2 hover:bg-red-500/20 rounded-full transition-colors text-red-500"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar max-h-[60vh]">
+                <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-2 font-bold">Vozes Disponíveis no Sistema:</p>
+                {availableVoices.length === 0 && (
+                  <p className="text-xs text-red-400 italic">Nenhuma voz detectada. Tente recarregar a página.</p>
+                )}
+                {availableVoices.map((voice, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setSelectedVoice(voice);
+                      setShowVoiceSettings(false);
+                      setTimeout(() => {
+                        speak(`Protocolo de voz alterado para ${voice.name.split(' ')[0]}. Sistema online.`);
+                      }, 100);
+                    }}
+                    className={`w-full p-4 rounded-xl border text-left transition-all flex items-center justify-between group ${
+                      selectedVoice?.name === voice.name 
+                        ? "bg-blue-500/20 border-blue-500 text-blue-400" 
+                        : "bg-slate-950 border-slate-800 hover:border-blue-500/50 text-slate-400"
+                    }`}
+                  >
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold uppercase tracking-tight">{voice.name}</span>
+                      <span className="text-[8px] opacity-50">{voice.lang}</span>
+                    </div>
+                    {selectedVoice?.name === voice.name && (
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(59,130,246,1)]" />
+                    )}
+                  </button>
+                ))}
+              </div>
+              <div className="p-4 bg-slate-950/50 border-t border-blue-900/30">
+                <p className="text-[10px] text-slate-500 leading-relaxed italic">
+                  * As vozes disponíveis dependem dos sintetizadores instalados no seu navegador e sistema operacional (Windows, macOS, Android, etc).
+                </p>
               </div>
             </motion.div>
           </motion.div>
