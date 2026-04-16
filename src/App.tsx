@@ -200,45 +200,73 @@ export default function App() {
   };
 
   const startScreenLink = async () => {
-    // Check if mediaDevices exists and if getDisplayMedia is available
-    const isSupported = typeof navigator !== 'undefined' && 
-                        navigator.mediaDevices && 
-                        typeof navigator.mediaDevices.getDisplayMedia === 'function';
+    // Detect mobile device
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    
+    const hasMediaDevices = typeof navigator !== 'undefined' && navigator.mediaDevices;
+    const hasDisplayMedia = hasMediaDevices && typeof navigator.mediaDevices.getDisplayMedia === 'function';
+    const hasUserMedia = hasMediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function';
 
-    if (!isSupported) {
+    if (!hasDisplayMedia && !hasUserMedia) {
       setIsVisionSupported(false);
-      const errorMsg = "Senhor, o Protocolo de Visão está bloqueado por restrições de segurança do Iframe (Preview).";
+      const errorMsg = "Senhor, protocolo de visão não suportado neste hardware.";
       addLog(errorMsg, "system");
-      addLog("Sugestão: Clique no ícone 'Abrir em nova aba' no canto superior direito para liberar o acesso total.", "system");
-      speak("Senhor, a visão está bloqueada no modo de visualização. Por favor, utilize o aplicativo em uma aba dedicada para acesso total aos sensores.");
+      speak("Senhor, seu dispositivo não possui os módulos de visão necessários.");
       return;
     }
-    setIsVisionSupported(true);
+
+    // Mobile fallback strategy
+    if (isMobile && !hasDisplayMedia) {
+      addLog("Dispositivo móvel detectado. Ativando Câmera Serial...", "system");
+      speak("Dispositivo móvel detectado. Ativando câmeras externas.");
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: "environment" } 
+        });
+        setScreenStream(stream);
+        addLog("Vínculo visual via Câmera estabelecido.", "system");
+        return;
+      } catch (err) {
+        addLog("Câmeras inacessíveis.", "system");
+      }
+    }
 
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({ 
         video: {
-          displaySurface: "monitor",
+          displaySurface: isMobile ? "browser" : "monitor",
         } as any
       });
       setScreenStream(stream);
-      addLog("Protocolo de Visão estabelecido. Analisando sua tela, Senhor.", "system");
-      speak("Protocolo de Visão estabelecido. Estou analisando sua tela, Senhor.");
+      addLog("Protocolo de Visão estabelecido. Escaneando ambiente, Senhor.", "system");
+      speak("Protocolo de Visão estabelecido. Estou escaneando seu ambiente, Senhor.");
       
       stream.getVideoTracks()[0].onended = () => {
         setScreenStream(null);
         addLog("Conexão visual encerrada.", "system");
       };
     } catch (err: any) {
-      console.error("Screen capture failed:", err);
+      console.error("Vision error:", err);
       
+      if (isMobile && hasUserMedia) {
+        addLog("Compartilhamento indisponível. Alternando para Câmera...", "system");
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+          setScreenStream(stream);
+          addLog("Link de Câmera ativo como redundância.", "system");
+          return;
+        } catch (e) {
+          addLog("Falha em todos os protocolos de visão.", "system");
+        }
+      }
+
       if (err.name === 'NotAllowedError' || err.message?.includes('permissions policy')) {
         setIsVisionSupported(false);
-        const errorMsg = "Senhor, o acesso à tela foi negado pela política de permissões do navegador (Iframe).";
+        const errorMsg = "Senhor, permissões de visão negadas. No celular, use o Chrome ou Safari.";
         addLog(errorMsg, "system");
-        speak("Senhor, o navegador bloqueou a visão neste modo. Por favor, use o botão 'Abrir em nova aba' no topo.");
+        speak("Senhor, o sistema operacional negou o acesso visual.");
       } else {
-        addLog("Falha ao estabelecer link visual. Verifique as permissões.", "system");
+        addLog("Falha ao estabelecer link visual operacional.", "system");
       }
     }
   };
