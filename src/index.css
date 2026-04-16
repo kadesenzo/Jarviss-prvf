@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@theme {
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-100 font-sans;
+  }
+}
+
+@layer utilities {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-purple-500/20 rounded-full hover:bg-purple-500/40 transition-colors;
+  }
+  
+  .glass-panel {
+    @apply bg-slate-900/40 backdrop-blur-md border border-purple-500/20 shadow-[0_8px_32px_0_rgba(139,92,246,0.1)];
+  }
+  
+  .hardware-panel {
+    @apply bg-[#151619] border border-slate-800 rounded-lg shadow-[0_20px_40px_rgba(0,0,0,0.3)];
+  }
+
+  .neon-text {
+    @apply text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.5)];
+  }
+
+  .neon-border {
+    @apply border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.3)];
+  }
+
+  .dashed-ring {
+    @apply border border-dashed border-slate-700 rounded-full;
+  }
+}
