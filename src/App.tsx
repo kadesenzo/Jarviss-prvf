@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Mic, MicOff, Terminal, Search, Globe, Layout, Cpu, MapPin, X, ExternalLink, Lightbulb, Thermometer, Shield, Music, Smartphone, Settings, Monitor, Eye, TrendingUp, ListChecks, FileCode, Zap, Volume2, Database, ShieldCheck } from "lucide-react";
+import { Mic, MicOff, Terminal, Search, Globe, Layout, Cpu, MapPin, X, ExternalLink, Lightbulb, Thermometer, Shield, Music, Smartphone, Settings, Monitor, Eye, TrendingUp, ListChecks, FileCode, Zap, Volume2, Database, ShieldCheck, Home, Wind, Clock, Send } from "lucide-react";
 import JarvisCore from "./components/JarvisCore";
 import { processCommand } from "./services/gemini";
 
@@ -82,8 +82,15 @@ export default function App() {
   const [neuralLevel, setNeuralLevel] = useState(1.0);
   const [showReader, setShowReader] = useState(false);
   const [activeMission, setActiveMission] = useState<{ title: string; steps: string[]; currentStep: number } | null>(null);
+  const [requestedFiles, setRequestedFiles] = useState<any[]>([]);
+  const [studyGoals, setStudyGoals] = useState<{ id: string; text: string; completed: boolean }[]>([
+    { id: "1", text: "Completar lição na Sala do Futuro", completed: false },
+    { id: "2", text: "Revisar anotações de Matemática", completed: false }
+  ]);
+  const [pomodoro, setPomodoro] = useState({ timeLeft: 25 * 60, isActive: false, isBreak: false });
   const [readerData, setReaderData] = useState<{ url: string; interval: number; currentPage: number } | null>(null);
   const [chatInput, setChatInput] = useState("");
+  const [activeBase, setActiveBase] = useState<"system" | "core" | "study">("core");
   const [pendingAction, setPendingAction] = useState<{ type: string; data: any; callback: () => void } | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const [sensors, setSensors] = useState({
@@ -96,6 +103,7 @@ export default function App() {
   const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
   
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesis>(window.speechSynthesis);
@@ -180,6 +188,17 @@ export default function App() {
 
     addLog("Protocolo Jarvis ativo. Bem-vindo de volta, Criador.", "system");
   }, []);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logs]);
+
+  const handleChatSubmit = () => {
+    if (chatInput.trim()) {
+      handleCommand(chatInput);
+      setChatInput("");
+    }
+  };
 
   const requestLocation = () => {
     if ("geolocation" in navigator) {
@@ -286,6 +305,28 @@ export default function App() {
       videoRef.current.srcObject = screenStream;
     }
   }, [screenStream]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (pomodoro.isActive && pomodoro.timeLeft > 0) {
+      interval = setInterval(() => {
+        setPomodoro(prev => ({ ...prev, timeLeft: prev.timeLeft - 1 }));
+      }, 1000);
+    } else if (pomodoro.timeLeft === 0) {
+      const nextBreak = !pomodoro.isBreak;
+      setPomodoro({ 
+        timeLeft: nextBreak ? 5 * 60 : 25 * 60, 
+        isActive: false, 
+        isBreak: nextBreak 
+      });
+      speak(nextBreak ? "Senhor, ciclo concluído. Sugiro uma pausa de 5 minutos." : "Pausa finalizada. Retornando ao foco total.");
+    }
+    return () => clearInterval(interval);
+  }, [pomodoro.isActive, pomodoro.timeLeft]);
+
+  const toggleGoal = (id: string) => {
+    setStudyGoals(prev => prev.map(g => g.id === id ? { ...g, completed: !g.completed } : g));
+  };
 
   const addLog = (text: string, type: "user" | "jarvis" | "system") => {
     setLogs(prev => [{ id: Date.now() + Math.random(), text, type }, ...prev].slice(0, 50));
@@ -404,6 +445,9 @@ export default function App() {
             } else {
               window.open("https://www.youtube.com", "_blank");
             }
+          } else if (lowerApp.includes("sala do futuro") || lowerApp === "estudo") {
+             addLog("Acessando Plataforma Sala do Futuro (CMSP)...", "system");
+             window.open("https://cmsp.ip.tv/", "_blank");
           } else if (lowerApp === "spotify" || lowerApp === "musica") {
             if (action === "play") {
               // Try Spotify Web Deep Link
@@ -474,6 +518,35 @@ export default function App() {
         }, 3000);
       } catch (e) {
         console.error("Failed to parse mission JSON", e);
+      }
+    }
+
+    // Parse File Request
+    const fileRequestMatch = response.match(/<FILE_REQUEST_JSON>([\s\S]*?)<\/FILE_REQUEST_JSON>/);
+    if (fileRequestMatch) {
+      try {
+        const data = JSON.parse(fileRequestMatch[1]);
+        requestConfirmation(`baixar/solicitar o arquivo: ${data.fileName}.${data.extension}`, data, () => {
+          setRequestedFiles(prev => [...prev, { ...data, id: Date.now() }]);
+          addLog(`Protocolo de Arquivo Ativado: ${data.fileName}.${data.extension} solicitado para análise.`, "system");
+          speak(`Senhor, o arquivo para ${data.reason} foi solicitado. Assim que estiver no núcleo central, iniciarei o processamento.`);
+        });
+      } catch (e) {
+        console.error("Failed to parse file request JSON", e);
+      }
+    }
+
+    // Parse Study Planner
+    const studyMatch = response.match(/<STUDY_PLANNER_JSON>([\s\S]*?)<\/STUDY_PLANNER_JSON>/);
+    if (studyMatch) {
+      try {
+        const data = JSON.parse(studyMatch[1]);
+        if (data.action === "add") {
+          setStudyGoals(prev => [...prev, { id: Date.now().toString(), text: data.goal, completed: false }]);
+          addLog(`Nova meta de estudo: ${data.goal}`, "system");
+        }
+      } catch (e) {
+        console.error("Failed to parse study planner JSON", e);
       }
     }
 
@@ -693,691 +766,364 @@ export default function App() {
         </div>
       </header>
 
-      <main className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-8 relative overflow-y-auto lg:overflow-hidden">
-        {/* Left Panel: Logs & Terminal */}
-        <section className="glass-panel rounded-lg p-4 flex flex-col gap-4 h-[400px] lg:h-full">
-          {/* Screen Link Preview */}
-          <AnimatePresence>
-            {screenStream && (
-              <motion.div 
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="bg-slate-950 border border-purple-500/30 rounded-lg overflow-hidden relative group mb-2"
-              >
-                <div className="absolute top-2 left-2 z-10 flex items-center gap-2 bg-slate-950/80 px-2 py-1 rounded border border-purple-500/30">
-                  <Eye className="w-3 h-3 text-purple-400 animate-pulse" />
-                  <span className="text-[8px] font-bold uppercase tracking-widest text-purple-400">Link Visual Ativo</span>
-                </div>
-                <video 
-                  ref={videoRef} 
-                  autoPlay 
-                  playsInline 
-                  muted 
-                  className="w-full aspect-video object-cover opacity-80 group-hover:opacity-100 transition-opacity"
-                />
-                <div className="absolute inset-0 pointer-events-none border-2 border-purple-500/10 animate-pulse" />
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <div className="flex items-center gap-2 border-b border-purple-900/30 pb-2">
-            <Terminal className="w-4 h-4" />
-            <h2 className="text-sm font-bold uppercase">Interface de Comando</h2>
+      <main className="relative z-10 flex-1 flex flex-col lg:flex-row gap-6 p-4 md:p-6 overflow-hidden">
+        {/* Base 1: System & Status (Left) */}
+        <aside className={`${activeBase === 'system' ? 'flex' : 'hidden'} lg:flex w-full lg:w-72 flex-col gap-6 shrink-0 h-full overflow-y-auto custom-scrollbar pb-20 lg:pb-0`}>
+          {/* Sensors Base */}
+          <div className="glass-panel rounded-3xl p-5 flex flex-col gap-4 border-purple-500/10">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-purple-500/20 rounded-lg">
+                <Cpu className="w-4 h-4 text-purple-400" />
+              </div>
+              <h2 className="text-[10px] font-black uppercase tracking-widest text-white">Base de Diagnóstico</h2>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-white/5 p-4 rounded-3xl border border-white/5 shadow-inner">
+                <p className="text-[9px] text-zinc-500 uppercase font-black mb-1">Processamento</p>
+                <p className="text-sm font-black text-white tracking-widest leading-none">{sensors.cpu}</p>
+              </div>
+              <div className="bg-white/5 p-4 rounded-3xl border border-white/5 shadow-inner">
+                <p className="text-[9px] text-emerald-500/50 uppercase font-black mb-1">Frequência</p>
+                <p className="text-sm font-black text-emerald-400 tracking-widest leading-none">{sensors.internet}</p>
+              </div>
+              <div className="bg-white/5 p-4 rounded-3xl border border-white/5 shadow-inner">
+                <p className="text-[9px] text-amber-500/50 uppercase font-black mb-1">Sonda Térmica</p>
+                <p className="text-sm font-black text-amber-400 tracking-widest leading-none">{sensors.temp}</p>
+              </div>
+              <div className="bg-white/5 p-4 rounded-3xl border border-white/5 shadow-inner">
+                <p className="text-[9px] text-zinc-500 uppercase font-black mb-1">Movimento</p>
+                <p className="text-[10px] font-bold text-zinc-300 truncate leading-none">{sensors.motion}</p>
+              </div>
+            </div>
           </div>
-          <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-            <AnimatePresence initial={false}>
-              {logs.map(log => (
-                <motion.div
-                  key={log.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className={`text-xs p-2 rounded ${
-                    log.type === "user" ? "bg-purple-900/20 border-l-2 border-purple-500" : 
-                    log.type === "jarvis" ? "bg-fuchsia-900/20 border-l-2 border-fuchsia-500" : 
-                    "bg-slate-800/50 italic opacity-70"
-                  }`}
-                >
-                  <span className="font-bold mr-2">
-                    {log.type === "user" ? "> CRIADOR:" : log.type === "jarvis" ? "> JARVIS:" : "[SYS]:"}
-                  </span>
-                  {log.text}
-                </motion.div>
+
+          {/* Home Automation Base */}
+          <div className="glass-panel rounded-3xl p-5 flex-1 min-h-[300px] flex flex-col gap-4 border-emerald-500/10 shadow-lg">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-emerald-500/20 rounded-lg">
+                <Home className="w-4 h-4 text-emerald-400" />
+              </div>
+              <h2 className="text-[10px] font-black uppercase tracking-widest text-white">Domótica Central</h2>
+            </div>
+            <div className="space-y-3 overflow-y-auto pr-1 custom-scrollbar">
+              {homeDevices.map(device => (
+                <div key={device.id} className="flex items-center justify-between p-4 bg-white/5 rounded-3xl border border-white/5 group hover:bg-white/10 transition-all cursor-pointer">
+                  <div className="flex items-center gap-4">
+                    <div className={`p-3 rounded-2xl transition-all ${device.status === 'on' ? 'bg-emerald-500 text-black shadow-[0_0_15px_rgba(16,185,129,0.4)]' : 'bg-zinc-800 text-zinc-500'}`}>
+                      {device.type === 'luz' ? <Zap className="w-4 h-4" /> : device.type === 'ar' ? <Wind className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-zinc-200 uppercase tracking-tighter">{device.name}</p>
+                      <p className="text-[9px] text-zinc-500 uppercase font-black">{device.value || (device.status === 'on' ? 'Ativo' : 'Offline')}</p>
+                    </div>
+                  </div>
+                  <div className={`w-2 h-2 rounded-full ${device.status === 'on' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,1)]' : 'bg-zinc-700'}`} />
+                </div>
               ))}
+            </div>
+          </div>
+        </aside>
+
+        {/* Base 2: The Core & Chat (Center) - Hero Section */}
+        <section className={`${activeBase === 'core' ? 'flex' : 'hidden'} lg:flex flex-1 flex-col gap-6 min-w-0 h-full pb-20 lg:pb-0`}>
+          {/* Main Visualizer Container */}
+          <div className="glass-panel rounded-[3rem] p-6 md:p-12 flex flex-col items-center justify-center relative overflow-hidden shrink-0 min-h-[400px] border-purple-500/20 shadow-2xl">
+            {/* Neural Waves background */}
+            <div className="absolute inset-0 opacity-20 pointer-events-none overflow-hidden">
+               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-purple-500/10 rounded-full blur-[120px] animate-pulse" />
+               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] border border-purple-500/10 rounded-full animate-ping" />
+            </div>
+
+            <div className="relative z-10 flex flex-col items-center gap-12">
+              <div 
+                className="cursor-pointer transition-all hover:scale-105 active:scale-95 duration-500 shadow-[0_0_100px_rgba(168,85,247,0.15)] rounded-full"
+                onClick={toggleListening}
+              >
+                <JarvisCore isListening={isListening} isSpeaking={isSpeaking} />
+              </div>
+              
+              <div className="text-center">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="flex items-center justify-center gap-6 mb-3"
+                >
+                  <div className="h-0.5 w-12 bg-gradient-to-r from-transparent via-purple-500 to-transparent" />
+                  <span className="text-sm font-black text-white uppercase tracking-[0.6em] neon-text">{status}</span>
+                  <div className="h-0.5 w-12 bg-gradient-to-r from-transparent via-purple-500 to-transparent" />
+                </motion.div>
+                <p className="text-[11px] text-purple-600/60 font-black tracking-[0.4em] uppercase italic bg-purple-500/5 px-4 py-1 rounded-full border border-purple-500/10">Sincronização Neural Estável</p>
+              </div>
+            </div>
+
+            {/* Vision HUD Overlay */}
+            <AnimatePresence>
+              {screenStream && (
+                <motion.div 
+                  initial={{ x: 50, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  exit={{ x: 50, opacity: 0 }}
+                  className="absolute top-8 right-8 w-48 md:w-64 aspect-video rounded-3xl overflow-hidden border-2 border-purple-500/40 bg-black shadow-[0_0_50px_rgba(0,0,0,0.5)] z-20 group"
+                >
+                  <video 
+                    ref={videoRef} 
+                    autoPlay 
+                    playsInline 
+                    muted 
+                    className="w-full h-full object-cover opacity-90"
+                  />
+                  <div className="absolute inset-0 bg-blue-500/5 pointer-events-none" />
+                  <div className="absolute bottom-3 left-3 flex items-center gap-2 bg-black/70 px-3 py-1.5 rounded-2xl border border-white/10 backdrop-blur-xl">
+                     <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,1)]" />
+                     <span className="text-[10px] font-black text-white uppercase tracking-widest">Protocolo Olhos</span>
+                  </div>
+                </motion.div>
+              )}
             </AnimatePresence>
           </div>
 
-          {/* Chat Input */}
-          <form 
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (chatInput.trim()) {
-                handleCommand(chatInput);
-                setChatInput("");
-              }
-            }}
-            className="relative mt-2"
-          >
-            <input 
-              type="text"
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              placeholder="Digite um comando..."
-              className="w-full bg-slate-950/50 border border-purple-900/50 rounded-lg py-2 px-4 text-xs focus:outline-none focus:border-purple-500 transition-colors pr-10"
-            />
-            <button 
-              type="submit"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-purple-500 hover:text-purple-400 transition-colors"
-            >
-              <Terminal className="w-4 h-4" />
-            </button>
-          </form>
-        </section>
-
-        {/* Center: Jarvis Core */}
-        <section className="flex flex-col items-center justify-center gap-8 py-8 lg:py-0">
-          {/* Sensor HUD */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 w-full max-w-2xl mb-4">
-            {[
-              { label: "CPU", value: sensors.cpu, icon: Cpu, color: "text-blue-400" },
-              { label: "NET", value: sensors.internet, icon: Zap, color: "text-yellow-400" },
-              { label: "TEMP", value: sensors.temp, icon: Thermometer, color: "text-orange-400" },
-              { label: "MOV", value: sensors.motion, icon: Eye, color: sensors.motion !== "Nenhum" ? "text-red-500 animate-pulse" : "text-green-400" },
-            ].map((s, i) => (
-              <motion.div 
-                key={i}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}
-                className="bg-slate-900/50 border border-purple-500/20 p-3 rounded-xl flex flex-col items-center gap-1 backdrop-blur-sm"
-              >
-                <s.icon className={`w-4 h-4 ${s.color}`} />
-                <span className="text-[8px] uppercase tracking-widest opacity-50">{s.label}</span>
-                <span className="text-xs font-bold">{s.value}</span>
-              </motion.div>
-            ))}
-          </div>
-
-          <JarvisCore isListening={isListening} isSpeaking={isSpeaking} />
-          
-          <div className="flex flex-col items-center gap-4">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={toggleListening}
-                className={`group relative p-8 rounded-full transition-all duration-500 ${
-                  isListening ? "bg-red-500/20 shadow-[0_0_40px_rgba(239,68,68,0.4)]" : "bg-purple-500/10 hover:bg-purple-500/20 shadow-[0_0_20px_rgba(168,85,247,0.2)]"
-                }`}
-              >
-                <div className="absolute inset-0 rounded-full border border-purple-500/50 group-hover:scale-110 transition-transform" />
-                {isListening ? (
-                  <MicOff className="w-12 h-12 text-red-500" />
-                ) : (
-                  <Mic className="w-12 h-12 text-purple-400" />
-                )}
-              </button>
-
-              {isSpeaking && (
-                <motion.button
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  whileHover={{ scale: 1.1 }}
-                  onClick={stopSpeaking}
-                  className="p-4 bg-red-500/20 border border-red-500/50 rounded-full text-red-500 flex items-center justify-center gap-2 text-xs font-bold"
-                >
-                  <X className="w-4 h-4" />
-                  PARAR VOZ
-                </motion.button>
-              )}
-            </div>
-            <p className="text-sm animate-pulse text-purple-600 font-bold tracking-widest uppercase text-center">
-              {isListening ? "Escutando Criador..." : "Aguardando Instruções"}
-            </p>
-          </div>
-
-          {/* Mobile Smart Home Quick Access */}
-          <div className="lg:hidden grid grid-cols-4 gap-4 w-full px-4">
-            {homeDevices.map(device => (
-              <div key={device.id} className={`p-3 rounded-xl border flex flex-col items-center gap-2 ${device.status === 'on' ? 'bg-purple-500/20 border-purple-500' : 'bg-slate-900/50 border-purple-900/30 opacity-50'}`}>
-                {device.type === 'luz' && <Lightbulb className="w-5 h-5" />}
-                {device.type === 'ar' && <Thermometer className="w-5 h-5" />}
-                {device.type === 'seguranca' && <Shield className="w-5 h-5" />}
-                {device.type === 'som' && <Music className="w-5 h-5" />}
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Right Panel: Intelligence & Automation */}
-        <section className="space-y-6 overflow-y-auto custom-scrollbar pr-2 h-full">
-          {/* Local Scripts HUD */}
-          <div className="glass-panel rounded-lg p-4">
-            <div className="flex items-center gap-2 border-b border-purple-900/30 pb-2 mb-4">
-              <FileCode className="w-4 h-4 text-purple-400" />
-              <h2 className="text-sm font-bold uppercase">Módulo Actions: Scripts Locais</h2>
-            </div>
-            <div className="space-y-3">
-              <p className="text-[10px] opacity-60 leading-relaxed">
-                Senhor, estes são os núcleos de automação para execução no seu sistema operacional local (Windows).
-              </p>
-              <button 
-                onClick={() => setShowScripts(true)}
-                className="w-full py-3 bg-slate-950 border border-purple-500/30 rounded-lg text-xs font-bold hover:bg-purple-500/10 transition-all flex items-center justify-center gap-2"
-              >
-                <Terminal className="w-4 h-4" /> ACESSAR CÓDIGO FONTE
-              </button>
-            </div>
-          </div>
-
-          {/* Smart Home HUD */}
-          <div className="glass-panel rounded-lg p-4">
-            <div className="flex items-center gap-2 border-b border-purple-900/30 pb-2 mb-4">
-              <Settings className="w-4 h-4 text-purple-400" />
-              <h2 className="text-sm font-bold uppercase">Controle Residencial</h2>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {homeDevices.map(device => (
-                <div key={device.id} className={`p-3 rounded-lg border transition-all ${device.status === 'on' ? 'bg-purple-500/10 border-purple-500/50' : 'bg-slate-800/30 border-purple-900/20 opacity-60'}`}>
-                  <div className="flex items-center gap-2 mb-1">
-                    {device.type === 'luz' && <Lightbulb className="w-3 h-3" />}
-                    {device.type === 'ar' && <Thermometer className="w-3 h-3" />}
-                    {device.type === 'seguranca' && <Shield className="w-3 h-3" />}
-                    {device.type === 'som' && <Music className="w-3 h-3" />}
-                    <span className="text-[10px] font-bold uppercase">{device.name}</span>
+          {/* Interaction Zone Base */}
+          <div className="flex-1 flex flex-col min-h-0 glass-panel rounded-[3rem] overflow-hidden border-white/5 shadow-2xl transition-all duration-500 group-focus-within:border-purple-500/20">
+            {/* Logs Area */}
+            <div className="flex-1 overflow-y-auto p-6 md:p-10 space-y-8 custom-scrollbar">
+              {logs.length === 0 && (
+                <div className="h-full flex flex-col items-center justify-center gap-6">
+                  <div className="w-16 h-16 bg-purple-500/10 rounded-3xl flex items-center justify-center border border-purple-500/20 animate-bounce">
+                    <ShieldCheck className="w-8 h-8 text-purple-400" />
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className={`text-[8px] px-1 rounded ${device.status === 'on' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                      {device.status === 'on' ? 'ATIVO' : 'OFFLINE'}
-                    </span>
-                    {device.value && <span className="text-[8px] opacity-50">{device.value}</span>}
+                  <div className="text-center">
+                    <p className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-600 mb-2">Segurança de Grada de Dados</p>
+                    <p className="text-[12px] font-bold text-zinc-400 italic">"Pronto para servir, Senhor. Qual a primeira diretriz?"</p>
                   </div>
                 </div>
+              )}
+              {logs.map((log) => (
+                <motion.div
+                  key={log.id}
+                  initial={{ opacity: 0, x: log.type === "user" ? 20 : -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className={`flex gap-5 ${log.type === "user" ? "flex-row-reverse text-right" : ""}`}
+                >
+                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-3xl flex items-center justify-center shrink-0 border-2 shadow-2xl transition-transform hover:scale-110
+                    ${log.type === "user" 
+                      ? "bg-zinc-800 border-white/10" 
+                      : log.type === "jarvis" 
+                        ? "bg-purple-600 border-purple-400" 
+                        : "bg-emerald-600/20 border-emerald-500/40"
+                    }`}
+                  >
+                    {log.type === "user" ? <Monitor className="w-5 h-5 text-zinc-400" /> : <Zap className="w-6 h-6 text-white" />}
+                  </div>
+                  <div className={`flex flex-col max-w-[85%] ${log.type === "user" ? "items-end" : ""}`}>
+                    <div className="flex items-center gap-2 mb-2 px-1">
+                      <span className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.3em]">
+                        {log.type === "user" ? "Comando Vocal" : log.type === "jarvis" ? "JARVIS CORE" : "SISTEMA INTEGRADO"}
+                      </span>
+                      <div className={`w-1 h-1 rounded-full ${log.type === 'user' ? 'bg-zinc-700' : 'bg-purple-500 animate-pulse'}`} />
+                    </div>
+                    <div className={`px-6 py-4 rounded-3xl text-[14px] leading-relaxed shadow-xl border
+                      ${log.type === "user" 
+                        ? "bg-zinc-800/80 text-zinc-100 rounded-tr-none border-white/5" 
+                        : "glass-panel text-white rounded-tl-none border-purple-500/20 bg-purple-500/5 backdrop-blur-3xl"
+                      }`}
+                    >
+                      {log.text}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Input Base */}
+            <div className="p-6 md:p-10 bg-black/60 border-t border-white/5 backdrop-blur-3xl">
+              <div className="max-w-4xl mx-auto relative group">
+                <div className="absolute inset-0 bg-purple-500/10 blur-2xl rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity" />
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleChatSubmit()}
+                  placeholder="Seu desejo é uma ordem, Senhor..."
+                  className="w-full bg-zinc-900/90 border-2 border-white/5 rounded-[2.5rem] py-6 pl-16 pr-36 text-sm text-white focus:outline-none focus:border-purple-500/50 transition-all placeholder:text-zinc-600 font-bold shadow-2xl relative z-10"
+                />
+                <div className="absolute left-6 top-1/2 -translate-y-1/2 z-20">
+                  <Terminal className="w-6 h-6 text-zinc-600 group-focus-within:text-purple-500 transition-colors" />
+                </div>
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-3 z-20">
+                  <motion.button 
+                    whileHover={{ scale: 1.1, rotate: 10 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={toggleListening}
+                    className={`p-4 rounded-2xl transition-all shadow-xl ${isListening ? 'bg-red-500 text-white shadow-[0_0_30px_rgba(239,68,68,0.6)]' : 'bg-zinc-800 text-zinc-400 hover:text-white border border-white/5'}`}
+                  >
+                    {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                  </motion.button>
+                  <motion.button 
+                    whileHover={{ scale: 1.1, x: 5 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={handleChatSubmit}
+                    className="p-4 bg-purple-600 hover:bg-purple-500 text-white rounded-2xl transition-all shadow-2xl shadow-purple-500/30 border border-purple-400/50"
+                  >
+                    <Send className="w-5 h-5" />
+                  </motion.button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Base 3: Personal Hub (Right) */}
+        <aside className={`${activeBase === 'study' ? 'flex' : 'hidden'} xl:flex w-full xl:w-80 flex-col gap-6 shrink-0 h-full overflow-y-auto custom-scrollbar pb-20 lg:pb-0`}>
+          {/* Study Center Base */}
+          <section className="glass-panel rounded-[2.5rem] p-6 border-emerald-500/10 shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-emerald-500/20 rounded-2xl flex items-center justify-center border border-emerald-500/30 shadow-lg">
+                  <ListChecks className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h2 className="text-[11px] font-black text-white uppercase tracking-[0.2em]">Fluxo de Metas</h2>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
+                    <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest leading-none">Status: Sincronizado</p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col items-end">
+                <span className="text-2xl font-black text-emerald-400 tracking-tighter">{Math.floor((studyGoals.filter(g => g.completed).length / (studyGoals.length || 1)) * 100)}%</span>
+              </div>
+            </div>
+            
+            <div className="space-y-3 mb-6 max-h-[220px] overflow-y-auto pr-2 custom-scrollbar">
+              {studyGoals.map(goal => (
+                <motion.div 
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  key={goal.id} 
+                  onClick={() => toggleGoal(goal.id)}
+                  className="group flex items-center gap-4 p-4 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/5 cursor-pointer transition-all active:scale-[0.98]"
+                >
+                  <div className={`w-6 h-6 rounded-xl border-2 flex items-center justify-center transition-all ${goal.completed ? 'bg-emerald-500 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.5)]' : 'border-zinc-700 bg-zinc-900'}`}>
+                    {goal.completed && <Zap className="w-3.5 h-3.5 text-black" />}
+                  </div>
+                  <span className={`text-xs font-bold transition-all ${goal.completed ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}>
+                    {goal.text}
+                  </span>
+                </motion.div>
               ))}
             </div>
+
+            <div className="relative group">
+               <input 
+                 type="text" 
+                 placeholder="Nova Diretriz..."
+                 className="w-full bg-black/40 border-2 border-white/5 rounded-2xl py-4 px-5 text-xs text-white focus:outline-none focus:border-emerald-500/50 transition-all placeholder:text-zinc-600 font-bold"
+                 onKeyDown={(e) => {
+                   if (e.key === "Enter" && (e.target as HTMLInputElement).value) {
+                     setStudyGoals(prev => [...prev, { id: Date.now().toString(), text: (e.target as HTMLInputElement).value, completed: false }]);
+                     (e.target as HTMLInputElement).value = "";
+                   }
+                 }}
+               />
+               <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                 <Zap className="w-4 h-4 text-zinc-700 group-focus-within:text-emerald-500 transition-colors" />
+               </div>
+            </div>
+          </section>
+
+          {/* Productivity Stats Base */}
+          <div className="grid grid-cols-1 gap-6">
+             {/* Pomodoro Base */}
+             <div className="glass-panel rounded-[2.5rem] p-6 border-amber-500/10 shadow-2xl relative overflow-hidden group">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-[40px] -mr-10 -mt-10 group-hover:bg-amber-500/10 transition-colors" />
+                <div className="flex items-center justify-between mb-4 relative z-10">
+                   <div className="flex items-center gap-3">
+                      <div className="p-2 bg-amber-500/20 rounded-xl">
+                        <Clock className="w-4 h-4 text-amber-500" />
+                      </div>
+                      <span className="text-[10px] font-black text-white uppercase tracking-widest">Hiper Foco</span>
+                   </div>
+                   <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all ${pomodoro.isActive ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-zinc-800 text-zinc-500 border-transparent'}`}>
+                      {pomodoro.isActive ? "Sincronizado" : "Standby"}
+                   </div>
+                </div>
+                <div className="flex items-center justify-between relative z-10">
+                   <span className="text-4xl font-black text-white tracking-[0.2em] font-mono leading-none drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]">
+                     {Math.floor(pomodoro.timeLeft / 60)}:{String(pomodoro.timeLeft % 60).padStart(2, '0')}
+                   </span>
+                   <button 
+                     onClick={() => setPomodoro(prev => ({ ...prev, isActive: !prev.isActive }))}
+                     className={`px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-tighter transition-all shadow-2xl ${pomodoro.isActive ? 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20' : 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/20'}`}
+                   >
+                     {pomodoro.isActive ? "Parar" : "Vincular"}
+                   </button>
+                </div>
+             </div>
           </div>
 
-          {/* App Actions HUD */}
-          <div className="glass-panel rounded-lg p-4">
-            <div className="flex items-center gap-2 border-b border-purple-900/30 pb-2 mb-4">
-              <Smartphone className="w-4 h-4 text-purple-400" />
-              <h2 className="text-sm font-bold uppercase">Execução de Apps</h2>
+          {/* App Interfaces Base */}
+          <section className="glass-panel rounded-[2.5rem] p-6 flex-1 min-h-[350px] flex flex-col gap-5 border-purple-500/10 shadow-3xl">
+            <div className="flex items-center gap-4">
+              <div className="p-2 bg-purple-500/20 rounded-xl">
+                <Smartphone className="w-5 h-5 text-purple-400" />
+              </div>
+              <h2 className="text-[11px] font-black uppercase tracking-[0.2em] text-white">Integração de Rede</h2>
             </div>
-            <div className="space-y-2">
-              {appActions.length > 0 ? (
-                appActions.map(action => (
-                  <div key={action.id} className="text-[10px] p-2 bg-purple-900/10 border border-purple-900/30 rounded flex justify-between items-center">
-                    <div>
-                      <span className="font-bold text-purple-300 uppercase">{action.app}</span>
-                      <span className="mx-2 opacity-50">→</span>
-                      <span className="opacity-70">{action.action}</span>
-                    </div>
-                    {action.params && <span className="text-[8px] opacity-40">[{action.params}]</span>}
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-4 opacity-30 text-xs italic">
-                  Nenhuma ação recente.
+            
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+              {appActions.length === 0 && (
+                <div className="h-full flex flex-col items-center justify-center py-16 opacity-10 grayscale">
+                  <Database className="w-12 h-12 mb-4 animate-pulse" />
+                  <p className="text-[11px] font-black uppercase tracking-[0.3em]">Protocolos Ociosos</p>
                 </div>
               )}
-            </div>
-          </div>
-
-          {/* Finance HUD */}
-          <div className="glass-panel rounded-lg p-4">
-            <div className="flex items-center gap-2 border-b border-purple-900/30 pb-2 mb-4">
-              <TrendingUp className="w-4 h-4 text-purple-400" />
-              <h2 className="text-sm font-bold uppercase">Módulo Financeiro</h2>
-            </div>
-            <div className="space-y-2">
-              {financeRecords.length > 0 ? (
-                financeRecords.map(record => (
-                  <div key={record.id} className="flex justify-between items-center text-[10px] p-2 bg-slate-950/50 border border-purple-900/20 rounded">
-                    <div className="flex flex-col">
-                      <span className="font-bold uppercase opacity-70">{record.description}</span>
-                      <span className="text-[8px] opacity-40">{record.date}</span>
-                    </div>
-                    <span className={`font-bold ${record.type === 'ganho' ? 'text-green-500' : 'text-red-500'}`}>
-                      {record.type === 'ganho' ? '+' : '-'} R$ {record.amount.toLocaleString()}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-4 opacity-30 text-xs italic">
-                  Sem registros financeiros.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Planning HUD */}
-          <div className="glass-panel rounded-lg p-4">
-            <div className="flex items-center gap-2 border-b border-purple-900/30 pb-2 mb-4">
-              <ListChecks className="w-4 h-4 text-purple-400" />
-              <h2 className="text-sm font-bold uppercase">Brain: Planejamento</h2>
-            </div>
-            {currentPlan ? (
-              <div className="space-y-3">
-                <p className="text-[10px] font-bold text-purple-300 uppercase underline decoration-purple-500/30 underline-offset-4 mb-2">
-                  Objetivo: {currentPlan.goal}
-                </p>
-                <div className="space-y-2">
-                  {currentPlan.steps.map((step, i) => (
-                    <div key={i} className="flex items-start gap-2 text-[10px]">
-                      <span className="w-4 h-4 rounded-full bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-[8px] shrink-0">{i + 1}</span>
-                      <span className="opacity-80">{step}</span>
-                    </div>
-                  ))}
-                </div>
-                <button 
-                  onClick={() => setCurrentPlan(null)}
-                  className="w-full py-2 mt-2 bg-purple-500/10 border border-purple-500/30 rounded text-[10px] font-bold hover:bg-purple-500/20 transition-colors"
+              {appActions.map(action => (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  key={action.id}
+                  className="p-5 glass-panel rounded-3xl border-white/5 hover:border-purple-500/30 hover:bg-purple-500/5 transition-all group group-active:scale-95"
                 >
-                  LIMPAR PLANO
-                </button>
-              </div>
-            ) : (
-              <div className="text-center py-4 opacity-30 text-xs italic">
-                Aguardando comando complexo...
-              </div>
-            )}
-          </div>
-
-          {/* Neural Core HUD */}
-          <AnimatePresence>
-            {showNeuralCore && (
-              <motion.div 
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                className="hardware-panel p-4 overflow-hidden"
-              >
-                <div className="flex items-center justify-between border-b border-purple-900/30 pb-2 mb-4">
-                  <div className="flex items-center gap-2">
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
-                    >
-                      <Cpu className="w-4 h-4 text-fuchsia-400" />
-                    </motion.div>
-                    <h2 className="text-sm font-bold uppercase text-fuchsia-400">Núcleo Neural v{neuralLevel}</h2>
-                  </div>
-                  <button onClick={() => setShowNeuralCore(false)} className="text-slate-500 hover:text-white">
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-end">
-                    <span className="text-[10px] opacity-50 uppercase">Consciência Expandida</span>
-                    <span className="text-xs font-mono text-fuchsia-400">{(neuralLevel * 100).toFixed(0)}% SYNC</span>
-                  </div>
-                  <div className="h-2 bg-slate-800 rounded-full overflow-hidden p-[1px]">
-                    <motion.div 
-                      initial={{ width: 0 }}
-                      animate={{ width: `${(neuralLevel / 2) * 100}%` }}
-                      className="h-full bg-gradient-to-r from-purple-600 to-fuchsia-400 rounded-full shadow-[0_0_10px_rgba(217,70,239,0.5)]"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="p-2 bg-slate-950 rounded border border-fuchsia-900/20">
-                      <p className="text-[8px] opacity-40 uppercase mb-1">Sub-rotinas</p>
-                      <p className="text-[10px] font-bold text-fuchsia-300">{(neuralLevel * 12).toFixed(0)} Ativas</p>
-                    </div>
-                    <div className="p-2 bg-slate-950 rounded border border-fuchsia-900/20">
-                      <p className="text-[8px] opacity-40 uppercase mb-1">Latência</p>
-                      <p className="text-[10px] font-bold text-fuchsia-300">{(10 / neuralLevel).toFixed(1)}ms</p>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest group-hover:text-purple-300">{action.app}</span>
+                    <div className="flex gap-1.5">
+                       <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(168,85,247,1)]" />
+                       <div className="w-1.5 h-1.5 bg-zinc-700 rounded-full" />
                     </div>
                   </div>
-                  <p className="text-[9px] italic opacity-50 text-center">
-                    "Criando novas formas de inteligência sob seu comando, Senhor."
-                  </p>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* System Resources HUD */}
-          <div className="glass-panel rounded-lg p-4">
-            <div className="flex justify-between text-[8px] mb-2">
-              <span>CPU LOAD</span>
-              <span>MEMORY</span>
-              <span>NETWORK</span>
+                  <p className="text-[13px] font-black text-white mb-1.5 leading-tight">{action.action}</p>
+                  <p className="text-[10px] text-zinc-500 font-mono tracking-tighter line-clamp-2">{action.params || "Parâmetros Dinâmicos"}</p>
+                </motion.div>
+              ))}
             </div>
-            <div className="flex gap-2 h-1">
-              <div className="flex-1 bg-purple-900/30 rounded-full overflow-hidden">
-                <motion.div animate={{ width: ["20%", "45%", "30%"] }} transition={{ duration: 3, repeat: Infinity }} className="h-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]" />
-              </div>
-              <div className="flex-1 bg-purple-900/30 rounded-full overflow-hidden">
-                <motion.div animate={{ width: ["60%", "65%", "62%"] }} transition={{ duration: 5, repeat: Infinity }} className="h-full bg-fuchsia-500 shadow-[0_0_8px_rgba(217,70,239,0.5)]" />
-              </div>
-              <div className="flex-1 bg-purple-900/30 rounded-full overflow-hidden">
-                <motion.div animate={{ width: ["10%", "90%", "15%"] }} transition={{ duration: 2, repeat: Infinity }} className="h-full bg-green-500" />
-              </div>
-            </div>
-          </div>
+          </section>
+        </aside>
 
-          {/* Automation Tasks */}
-          <div className="bg-slate-900/50 border border-purple-900/30 rounded-lg p-4 flex flex-col backdrop-blur-sm">
-            <div className="flex items-center gap-2 border-b border-purple-900/30 pb-2 mb-4">
-              <Cpu className="w-4 h-4 text-purple-400" />
-              <h2 className="text-sm font-bold uppercase text-purple-400">Automações Ativas</h2>
-            </div>
-            <div className="space-y-4">
-              {activeTasks.length > 0 ? (
-                activeTasks.map((task) => (
-                  <div key={task.id} className="bg-purple-900/10 border border-purple-900/30 p-3 rounded-lg relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-1 opacity-20 group-hover:opacity-100 transition-opacity">
-                      <motion.div animate={{ rotate: 360 }} transition={{ duration: 4, repeat: Infinity, ease: "linear" }}>
-                        <Cpu className="w-3 h-3" />
-                      </motion.div>
-                    </div>
-                    <div className="flex justify-between items-center mb-2">
-                      <p className="text-xs font-bold text-purple-300 uppercase">{task.taskName}</p>
-                      <span className="text-[10px] opacity-50">{Math.round(task.progress)}%</span>
-                    </div>
-                    <p className="text-[10px] opacity-70 mb-2">{task.description}</p>
-                    <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                      <motion.div 
-                        className="bg-purple-500 h-full"
-                        animate={{ width: `${task.progress}%` }}
-                      />
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-8 opacity-30 text-xs italic">
-                  Nenhuma automação em execução.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Leads Panel */}
-          <div className="glass-panel rounded-lg p-4 flex flex-col">
-            <div className="flex items-center gap-2 border-b border-purple-900/30 pb-2 mb-4">
-              <Search className="w-4 h-4" />
-              <h2 className="text-sm font-bold uppercase">Inteligência de Mercado</h2>
-            </div>
-            <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
-              {leads.length > 0 ? (
-                leads.map((lead, i) => (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.1 }}
-                    key={i}
-                    className="text-[10px] p-2 bg-purple-900/10 border border-purple-900/30 rounded hover:bg-purple-900/20 transition-colors group"
-                  >
-                    <div className="flex justify-between items-start">
-                      <p className="font-bold text-purple-300">{lead.name}</p>
-                      <MapPin className="w-2 h-2 text-purple-600" />
-                    </div>
-                    <p className="opacity-70">{lead.address}</p>
-                    <span className="text-yellow-500 mt-1 block font-bold">{lead.status}</span>
-                  </motion.div>
-                ))
-              ) : (
-                <div className="text-center py-4 opacity-30 text-xs">
-                  Aguardando comando de busca...
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="glass-panel rounded-lg p-4 h-[calc(50%-1.5rem)] flex flex-col">
-            <div className="flex items-center gap-2 border-b border-purple-900/30 pb-2 mb-4">
-              <Layout className="w-4 h-4" />
-              <h2 className="text-sm font-bold uppercase">Projetos de Web</h2>
-            </div>
-            {siteData ? (
-              <div className="flex-1 flex flex-col gap-3">
-                <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded">
-                  <p className="text-[10px] uppercase opacity-50 mb-1">Cliente</p>
-                  <p className="text-xs font-bold text-white">{siteData.name}</p>
-                </div>
-                <button 
-                  onClick={() => setShowSiteBuilder(true)}
-                  className="mt-auto w-full py-3 bg-purple-500 text-slate-950 font-bold text-xs rounded hover:bg-purple-400 transition-all flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(168,85,247,0.4)]"
-                >
-                  <ExternalLink className="w-3 h-3" /> ABRIR CONSTRUTOR
-                </button>
-              </div>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center opacity-30 text-xs text-center gap-2">
-                <Globe className="w-8 h-8 opacity-20" />
-                Diga: "Jarvis, crie um site para a [Nome]"
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Site Builder Modal */}
-        <AnimatePresence>
-          {showSiteBuilder && siteData && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4 lg:p-12"
-            >
-              <div className="w-full max-w-5xl h-full bg-slate-900 border border-purple-500/30 rounded-2xl overflow-hidden flex flex-col shadow-[0_0_100px_rgba(168,85,247,0.2)]">
-                {/* Modal Header */}
-                <div className="p-4 border-b border-purple-900/50 flex justify-between items-center bg-slate-950/50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded bg-purple-500 flex items-center justify-center text-slate-950 font-bold">J</div>
-                    <div>
-                      <h3 className="text-sm font-bold uppercase tracking-widest">Jarvis Web Builder</h3>
-                      <p className="text-[10px] text-purple-600">PREVISUALIZAÇÃO EM TEMPO REAL</p>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => setShowSiteBuilder(false)}
-                    className="p-2 hover:bg-red-500/20 rounded-full transition-colors text-red-500"
-                  >
-                    <X className="w-6 h-6" />
-                  </button>
-                </div>
-
-                {/* Preview Area */}
-                <div className="flex-1 overflow-y-auto bg-white text-slate-900 font-sans">
-                  {/* Hero Section */}
-                  <section 
-                    className="py-20 px-8 text-center"
-                    style={{ backgroundColor: siteData.colors.primary, color: '#fff' }}
-                  >
-                    <motion.h1 
-                      initial={{ y: 20, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      className="text-4xl lg:text-6xl font-black mb-6"
-                    >
-                      {siteData.name}
-                    </motion.h1>
-                    <p className="text-xl opacity-90 max-w-2xl mx-auto mb-10">{siteData.hero}</p>
-                    <button 
-                      className="px-8 py-4 rounded-full font-bold text-lg shadow-xl"
-                      style={{ backgroundColor: siteData.colors.secondary }}
-                    >
-                      Saiba Mais
-                    </button>
-                  </section>
-
-                  {/* Features */}
-                  <section className="py-16 px-8 max-w-4xl mx-auto">
-                    <h2 className="text-2xl font-bold text-center mb-12">Nossos Diferenciais</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                      {siteData.features.map((f, i) => (
-                        <div key={i} className="flex gap-4 items-start p-6 rounded-2xl bg-slate-50 border border-slate-100">
-                          <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center" style={{ backgroundColor: siteData.colors.primary + '20', color: siteData.colors.primary }}>
-                            {i + 1}
-                          </div>
-                          <p className="text-lg font-medium">{f}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-
-                  {/* Footer */}
-                  <footer className="py-12 bg-slate-900 text-white text-center">
-                    <p className="opacity-50">© 2026 {siteData.name}. Criado pelo Jarvis.</p>
-                  </footer>
-                </div>
-
-                {/* Modal Controls */}
-                <div className="p-4 bg-slate-950/80 border-t border-purple-900/50 flex justify-between items-center">
-                  <p className="text-[10px] opacity-50 uppercase">Tecnologia: React + Tailwind + Gemini AI</p>
-                  <div className="flex gap-4">
-                    <button className="px-6 py-2 border border-purple-500/30 rounded text-xs font-bold hover:bg-purple-500/10">EDITAR CÓDIGO</button>
-                    <button className="px-6 py-2 bg-purple-500 text-slate-950 rounded text-xs font-bold hover:bg-purple-400">PUBLICAR AGORA</button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Confirmation Modal */}
-        <AnimatePresence>
-          {pendingAction && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md"
-            >
-              <motion.div 
-                initial={{ scale: 0.9, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                className="w-full max-w-md bg-slate-900 border border-purple-500/30 rounded-2xl p-8 shadow-[0_0_50px_rgba(168,85,247,0.2)]"
-              >
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="p-3 bg-purple-500/20 rounded-xl">
-                    <Shield className="w-8 h-8 text-purple-400" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-white">Confirmação Stark</h2>
-                    <p className="text-xs text-purple-600 uppercase tracking-widest">Protocolo de Segurança</p>
-                  </div>
-                </div>
-                
-                <p className="text-purple-100 mb-8 leading-relaxed">
-                  Senhor, recebi uma solicitação para <span className="text-purple-400 font-bold">{pendingAction.type}</span>. 
-                  Deseja que eu execute esta ação agora?
-                </p>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <button 
-                    onClick={() => {
-                      addLog("Ação cancelada pelo Criador.", "system");
-                      setPendingAction(null);
-                    }}
-                    className="py-3 rounded-xl border border-red-500/30 text-red-500 font-bold hover:bg-red-500/10 transition-all"
-                  >
-                    CANCELAR
-                  </button>
-                  <button 
-                    onClick={() => {
-                      pendingAction.callback();
-                      setPendingAction(null);
-                    }}
-                    className="py-3 rounded-xl bg-purple-500 text-slate-950 font-bold hover:bg-purple-400 transition-all shadow-[0_0_20px_rgba(168,85,247,0.4)]"
-                  >
-                    EXECUTAR
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Local Scripts Modal */}
-        <AnimatePresence>
-          {showScripts && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4 lg:p-12"
-            >
-              <div className="w-full max-w-4xl h-full bg-slate-900 border border-purple-500/30 rounded-2xl overflow-hidden flex flex-col shadow-[0_0_100px_rgba(168,85,247,0.2)]">
-                <div className="p-4 border-b border-purple-900/50 flex justify-between items-center bg-slate-950/50">
-                  <div className="flex items-center gap-3">
-                    <FileCode className="w-6 h-6 text-purple-400" />
-                    <div>
-                      <h3 className="text-sm font-bold uppercase tracking-widest">Módulo Actions: Scripts Python</h3>
-                      <p className="text-[10px] text-purple-600">NÚCLEO DE AUTOMAÇÃO LOCAL</p>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => setShowScripts(false)}
-                    className="p-2 hover:bg-red-500/20 rounded-full transition-colors text-red-500"
-                  >
-                    <X className="w-6 h-6" />
-                  </button>
-                </div>
-                <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-                  <div className="space-y-4">
-                    <h4 className="text-purple-400 font-bold text-xs uppercase tracking-widest">1. jarvis_bridge.py (Alexa + Jarvis)</h4>
-                    <div className="bg-slate-950 rounded-lg p-4 border border-purple-900/30">
-                      <pre className="text-[10px] text-purple-700 leading-relaxed">
-{`# Protocolo de Integração Alexa + Jarvis
-import requests
-import time
-from flask import Flask, request, jsonify
-
-app = Flask(__name__)
-
-# URL do seu JARVIS no AI Studio
-JARVIS_URL = "https://seu-app-ai-studio.run.app/api/command"
-
-@app.route('/alexa', methods=['POST'])
-def alexa_trigger():
-    data = request.json
-    command = data.get("command", "")
-    
-    print(f"[*] Alexa recebeu: {command}")
-    print("[*] Encaminhando para o Núcleo Jarvis...")
-    
-    response = requests.post(JARVIS_URL, json={"command": command})
-    jarvis_text = response.json().get("text", "Erro de conexão.")
-    
-    return jsonify({"response": jarvis_text})
-
-if __name__ == "__main__":
-    # Use ngrok para expor esta porta para a Alexa
-    app.run(port=5000)`}
-                      </pre>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <h4 className="text-purple-400 font-bold text-xs uppercase tracking-widest">2. actions.py (Automação PyAutoGUI)</h4>
-                    <div className="bg-slate-950 rounded-lg p-4 border border-purple-900/30">
-                      <pre className="text-[10px] text-purple-700 leading-relaxed">
-{`import pyautogui
-import os
-
-def open_app(app_name):
-    os.system(f"start {app_name}")
-
-def type_text(text):
-    pyautogui.write(text, interval=0.1)
-
-def take_screenshot():
-    pyautogui.screenshot("screen.png")`}
-                      </pre>
-                    </div>
-                  </div>
-
-                  <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
-                    <p className="text-xs font-bold text-purple-300 mb-2 uppercase">Instruções de Instalação:</p>
-                    <ol className="text-[10px] space-y-1 list-decimal list-inside opacity-80">
-                      <li>Instale o Python 3.10+ no seu Windows.</li>
-                      <li>Execute: pip install SpeechRecognition pyttsx3 requests pyautogui selenium</li>
-                      <li>Copie os códigos acima para arquivos .py na mesma pasta.</li>
-                      <li>Execute o main.py para iniciar a integração local.</li>
-                    </ol>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Mobile Navigation Bar */}
+        <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 flex lg:hidden items-center gap-3 bg-zinc-900/90 border border-white/10 p-2.5 rounded-[2rem] backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-[100]">
+          <button 
+            onClick={() => setActiveBase('system')}
+            className={`p-4 rounded-full transition-all flex items-center gap-2 ${activeBase === 'system' ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/30' : 'text-zinc-500 hover:text-white'}`}
+          >
+            <Cpu className="w-5 h-5" />
+            {activeBase === 'system' && <span className="text-[10px] font-black uppercase tracking-widest pr-2">Sistema</span>}
+          </button>
+          <button 
+            onClick={() => setActiveBase('core')}
+            className={`p-4 rounded-full transition-all flex items-center gap-2 ${activeBase === 'core' ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/30' : 'text-zinc-500 hover:text-white'}`}
+          >
+            <Zap className="w-5 h-5" />
+            {activeBase === 'core' && <span className="text-[10px] font-black uppercase tracking-widest pr-2">Núcleo</span>}
+          </button>
+          <button 
+            onClick={() => setActiveBase('study')}
+            className={`p-4 rounded-full transition-all flex items-center gap-2 ${activeBase === 'study' ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/30' : 'text-zinc-500 hover:text-white'}`}
+          >
+            <ListChecks className="w-5 h-5" />
+            {activeBase === 'study' && <span className="text-[10px] font-black uppercase tracking-widest pr-2">Estudo</span>}
+          </button>
+        </nav>
       </main>
 
       {/* Footer Decoration */}
@@ -1479,6 +1225,41 @@ def take_screenshot():
         )}
       </AnimatePresence>
       {/* Genesis Modal */}
+      {/* File Request Tray */}
+      <AnimatePresence>
+        {requestedFiles.length > 0 && (
+          <motion.div 
+            initial={{ y: 200 }}
+            animate={{ y: 0 }}
+            className="fixed bottom-32 right-6 z-[100] w-64 space-y-2"
+          >
+            {requestedFiles.slice(-3).map(file => (
+              <motion.div 
+                key={file.id}
+                initial={{ x: 50, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                className="bg-zinc-900/90 border border-white/10 p-3 rounded-xl flex items-center gap-3"
+              >
+                <div className="p-2 bg-blue-500/20 rounded-lg">
+                  <FileCode className="w-4 h-4 text-blue-400" />
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <p className="text-[10px] font-bold text-white truncate">{file.fileName}.{file.extension}</p>
+                  <div className="w-full bg-white/10 h-1 mt-1 rounded-full overflow-hidden">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: "100%" }}
+                      transition={{ duration: 5 }}
+                      className="bg-blue-500 h-full"
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {activeMission && (
           <motion.div 
