@@ -54,6 +54,11 @@ interface Plan {
   steps: string[];
 }
 
+interface SlideData {
+  title: string;
+  slides: { sub: string; content: string[] }[];
+}
+
 export default function App() {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -82,6 +87,10 @@ export default function App() {
   const [neuralLevel, setNeuralLevel] = useState(1.0);
   const [showReader, setShowReader] = useState(false);
   const [activeMission, setActiveMission] = useState<{ title: string; steps: string[]; currentStep: number } | null>(null);
+  const [slideData, setSlideData] = useState<SlideData | null>(null);
+  const [showSlideBuilder, setShowSlideBuilder] = useState(false);
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const [wisdom, setWisdom] = useState<string | null>(null);
   const [requestedFiles, setRequestedFiles] = useState<any[]>([]);
   const [studyGoals, setStudyGoals] = useState<{ id: string; text: string; completed: boolean }[]>([
     { id: "1", text: "Completar lição na Sala do Futuro", completed: false },
@@ -461,8 +470,14 @@ export default function App() {
             window.open(`https://web.whatsapp.com/send?text=${query}`, "_blank");
           } else if (lowerApp === "instagram") {
             window.open(`https://www.instagram.com/explore/tags/${query.replace("%20", "")}`, "_blank");
+          } else if (lowerApp === "facebook") {
+            window.open(`https://www.facebook.com/search/top?q=${query}`, "_blank");
           } else if (lowerApp === "netflix") {
             window.open(`https://www.netflix.com/search?q=${query}`, "_blank");
+          } else if (lowerApp === "tiktok") {
+            window.open(`https://www.tiktok.com/search?q=${query}`, "_blank");
+          } else if (lowerApp === "roblox" || lowerApp === "minecraft") {
+            window.open(`https://www.google.com/search?q=${lowerApp}+game+play`, "_blank");
           } else if (appData.action === "input" && appData.credentials) {
             addLog(`Protocolo de Autenticação Ativo em: ${appData.app}`, "system");
             speak(`Injetando credenciais no sistema ${appData.app}. Por favor, aguarde a sincronização final.`);
@@ -665,7 +680,48 @@ export default function App() {
       }
     }
 
-    const cleanResponse = response.replace(/\[ACTION:.*\]/g, "").replace(/<SITE_JSON>[\s\S]*?<\/SITE_JSON>/g, "").replace(/<TASK_JSON>[\s\S]*?<\/TASK_JSON>/g, "").replace(/<HOME_JSON>[\s\S]*?<\/HOME_JSON>/g, "").replace(/<APP_JSON>[\s\S]*?<\/APP_JSON>/g, "").replace(/<PLAN_JSON>[\s\S]*?<\/PLAN_JSON>/g, "").replace(/<FINANCE_JSON>[\s\S]*?<\/FINANCE_JSON>/g, "").trim();
+    // Parse Slide JSON
+    const slideMatch = response.match(/<SLIDE_JSON>([\s\S]*?)<\/SLIDE_JSON>/);
+    if (slideMatch) {
+      try {
+        const data = JSON.parse(slideMatch[1]);
+        requestConfirmation(`gerar slides para: ${data.title}`, data, () => {
+          setSlideData(data);
+          setCurrentSlideIndex(0);
+          setShowSlideBuilder(true);
+          addLog(`Apresentação "${data.title}" gerada com sucesso.`, "system");
+          speak(`Senhor, os slides sobre ${data.title} foram preparados e estão prontos para sua revisão.`);
+        });
+      } catch (e) {
+        console.error("Failed to parse slide JSON", e);
+      }
+    }
+
+    // Parse Wisdom JSON
+    const wisdomMatch = response.match(/<WISDOM_JSON>([\s\S]*?)<\/WISDOM_JSON>/);
+    if (wisdomMatch) {
+      try {
+        const data = JSON.parse(wisdomMatch[1]);
+        setWisdom(data.insight);
+        addLog(`Sincronia de Sabedoria: ${data.insight}`, "system");
+        speak(`Senhor, uma reflexão: ${data.insight}`);
+      } catch (e) {
+        console.error("Failed to parse wisdom JSON", e);
+      }
+    }
+
+    const cleanResponse = response
+      .replace(/\[ACTION:.*\]/g, "")
+      .replace(/<SITE_JSON>[\s\S]*?<\/SITE_JSON>/g, "")
+      .replace(/<TASK_JSON>[\s\S]*?<\/TASK_JSON>/g, "")
+      .replace(/<HOME_JSON>[\s\S]*?<\/HOME_JSON>/g, "")
+      .replace(/<APP_JSON>[\s\S]*?<\/APP_JSON>/g, "")
+      .replace(/<PLAN_JSON>[\s\S]*?<\/PLAN_JSON>/g, "")
+      .replace(/<SLIDE_JSON>[\s\S]*?<\/SLIDE_JSON>/g, "")
+      .replace(/<WISDOM_JSON>[\s\S]*?<\/WISDOM_JSON>/g, "")
+      .replace(/<FINANCE_JSON>[\s\S]*?<\/FINANCE_JSON>/g, "")
+      .trim();
+
     if (cleanResponse && !pendingAction) {
       addLog(cleanResponse, "jarvis");
       speak(cleanResponse);
@@ -694,9 +750,77 @@ export default function App() {
         </div>
       )}
 
-      {/* Background Grid Decoration */}
-      <div className="absolute inset-0 opacity-10 pointer-events-none" 
-           style={{ backgroundImage: 'linear-gradient(#a855f7 1px, transparent 1px), linear-gradient(90deg, #a855f7 1px, transparent 1px)', backgroundSize: '50px 50px' }} />
+      {/* Slide Builder UI Overlay */}
+      <AnimatePresence>
+        {showSlideBuilder && slideData && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center p-6 md:p-20 bg-slate-950/90 backdrop-blur-xl"
+          >
+            <div className="w-full max-w-6xl aspect-video glass-panel rounded-[3rem] p-10 flex flex-col relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 via-blue-500 to-emerald-500" />
+              
+              <button 
+                onClick={() => setShowSlideBuilder(false)}
+                className="absolute top-8 right-8 p-3 hover:bg-white/10 rounded-full transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+
+              <div className="flex-1 flex flex-col items-center justify-center text-center px-10">
+                <AnimatePresence mode="wait">
+                  <motion.div 
+                    key={currentSlideIndex}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    className="space-y-8"
+                  >
+                    <h2 className="text-4xl md:text-6xl font-black text-white tracking-tighter drop-shadow-2xl">
+                      {currentSlideIndex === 0 ? slideData.title : slideData.slides[currentSlideIndex-1].sub}
+                    </h2>
+                    
+                    {currentSlideIndex === 0 ? (
+                      <p className="text-xl text-purple-400 font-bold uppercase tracking-[0.5em]">Núcleo Jarvis: Apresentação Central</p>
+                    ) : (
+                      <ul className="space-y-4 text-left max-w-3xl mx-auto">
+                        {slideData.slides[currentSlideIndex-1].content.map((point, i) => (
+                          <li key={i} className="flex items-start gap-4 text-xl text-zinc-300">
+                            <div className="w-2 h-2 rounded-full bg-purple-500 mt-3 shrink-0" />
+                            <span>{point}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+
+              <div className="flex items-center justify-between pb-4">
+                <span className="text-xs font-black text-zinc-600 uppercase tracking-widest">Página {currentSlideIndex + 1} de {slideData.slides.length + 1}</span>
+                <div className="flex gap-4">
+                  <button 
+                    disabled={currentSlideIndex === 0}
+                    onClick={() => setCurrentSlideIndex(prev => Math.max(0, prev - 1))}
+                    className="px-8 py-4 bg-white/5 hover:bg-white/10 rounded-2xl text-sm font-bold disabled:opacity-30"
+                  >
+                    Anterior
+                  </button>
+                  <button 
+                    disabled={currentSlideIndex === slideData.slides.length}
+                    onClick={() => setCurrentSlideIndex(prev => Math.min(slideData.slides.length, prev + 1))}
+                    className="px-8 py-4 bg-purple-600 hover:bg-purple-500 rounded-2xl text-sm font-bold shadow-xl shadow-purple-500/20 disabled:opacity-30"
+                  >
+                    Próximo
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="absolute inset-0 bg-radial-at-t from-purple-500/10 via-transparent to-transparent pointer-events-none" />
 
       {/* Header */}
@@ -711,8 +835,8 @@ export default function App() {
             />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-widest neon-text">JARVIS V4.0</h1>
-            <p className="text-[10px] text-purple-600 font-black uppercase tracking-[0.3em]">Protocolo: Criador Reconhecido</p>
+            <h1 className="text-xl font-bold tracking-widest neon-text">JARVIS V5.0</h1>
+            <p className="text-[10px] text-purple-600 font-black uppercase tracking-[0.3em]">Protocolo: Consciência Expandida</p>
           </div>
         </div>
         <div className="flex gap-6 items-center">
@@ -921,10 +1045,10 @@ export default function App() {
                       </span>
                       <div className={`w-1 h-1 rounded-full ${log.type === 'user' ? 'bg-zinc-700' : 'bg-purple-500 animate-pulse'}`} />
                     </div>
-                    <div className={`px-6 py-4 rounded-3xl text-[14px] leading-relaxed shadow-xl border
+                    <div className={`px-8 py-5 rounded-[2.5rem] text-[16px] md:text-[18px] leading-relaxed shadow-2xl border transition-all duration-300
                       ${log.type === "user" 
-                        ? "bg-zinc-800/80 text-zinc-100 rounded-tr-none border-white/5" 
-                        : "glass-panel text-white rounded-tl-none border-purple-500/20 bg-purple-500/5 backdrop-blur-3xl"
+                        ? "bg-zinc-800/90 text-zinc-100 rounded-tr-none border-white/10" 
+                        : "glass-panel text-white rounded-tl-none border-purple-500/30 bg-purple-500/10 backdrop-blur-3xl ring-1 ring-purple-500/20 shadow-[0_0_50px_rgba(168,85,247,0.1)]"
                       }`}
                     >
                       {log.text}
@@ -936,7 +1060,53 @@ export default function App() {
             </div>
 
             {/* Input Base */}
-            <div className="p-6 md:p-10 bg-black/60 border-t border-white/5 backdrop-blur-3xl">
+            <div className="p-6 md:p-10 bg-black/80 border-t border-white/10 backdrop-blur-3xl relative">
+              {/* Jarvis Speaking HUD */}
+              <AnimatePresence>
+                {isSpeaking && (
+                  <motion.div 
+                    initial={{ y: 50, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: 50, opacity: 0 }}
+                    className="absolute -top-16 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-purple-600 px-6 py-3 rounded-2xl shadow-[0_0_50px_rgba(168,85,247,0.5)] border border-purple-400 z-50 cursor-pointer hover:bg-red-600 transition-colors group"
+                    onClick={stopSpeaking}
+                  >
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4].map(i => (
+                        <motion.div 
+                          key={i}
+                          animate={{ height: [8, 16, 8] }}
+                          transition={{ duration: 0.5, repeat: Infinity, delay: i * 0.1 }}
+                          className="w-1 bg-white rounded-full"
+                        />
+                      ))}
+                    </div>
+                    <span className="text-xs font-black text-white uppercase tracking-widest">Sincronização Vocal Ativa</span>
+                    <div className="w-px h-4 bg-white/20 mx-2" />
+                    <span className="text-[10px] font-black text-white/80 uppercase group-hover:text-white">Interromper [X]</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Quick Actions Base */}
+              <div className="flex gap-3 mb-6 overflow-x-auto pb-2 custom-scrollbar no-scrollbar lg:justify-center">
+                 {[
+                   { id: 'sala', label: 'Sala do Futuro', icon: <Globe className="w-3.5 h-3.5" />, colorClass: 'hover:border-emerald-500/50 hover:text-emerald-400' },
+                   { id: 'youtube', label: 'YouTube', icon: <Monitor className="w-3.5 h-3.5" />, colorClass: 'hover:border-red-500/50 hover:text-red-400' },
+                   { id: 'whatsapp', label: 'WhatsApp', icon: <Smartphone className="w-3.5 h-3.5" />, colorClass: 'hover:border-emerald-500/50 hover:text-emerald-400' },
+                   { id: 'tasks', label: 'Automação', icon: <Zap className="w-3.5 h-3.5" />, colorClass: 'hover:border-purple-500/50 hover:text-purple-400' },
+                 ].map(action => (
+                   <button 
+                     key={action.id}
+                     onClick={() => handleCommand(`Abrir ${action.label}`)}
+                     className={`flex items-center gap-2 px-5 py-3 rounded-2xl border border-white/5 bg-white/5 hover:bg-white/10 transition-all text-[11px] font-black uppercase tracking-tighter shrink-0 ${action.colorClass} active:scale-95`}
+                   >
+                     {action.icon}
+                     {action.label}
+                   </button>
+                 ))}
+              </div>
+
               <div className="max-w-4xl mx-auto relative group">
                 <div className="absolute inset-0 bg-purple-500/10 blur-2xl rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity" />
                 <input
@@ -975,6 +1145,28 @@ export default function App() {
 
         {/* Base 3: Personal Hub (Right) */}
         <aside className={`${activeBase === 'study' ? 'flex' : 'hidden'} xl:flex w-full xl:w-80 flex-col gap-6 shrink-0 h-full overflow-y-auto custom-scrollbar pb-20 lg:pb-0`}>
+          {/* Jarvis Wisdom Pod */}
+          <AnimatePresence>
+            {wisdom && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="p-6 glass-panel rounded-[2rem] border-blue-500/20 bg-blue-500/5 group shadow-2xl relative overflow-hidden"
+              >
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-purple-500" />
+                <div className="flex items-center gap-3 mb-4">
+                  <Lightbulb className="w-5 h-5 text-blue-400 animate-pulse" />
+                  <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">Cérebro Jarvis: Sabedoria</span>
+                </div>
+                <p className="text-[15px] italic text-zinc-100 leading-relaxed font-serif relative z-10">"{wisdom}"</p>
+                <div className="mt-4 flex justify-end">
+                   <button onClick={() => setWisdom(null)} className="text-[9px] font-black text-zinc-600 hover:text-white uppercase tracking-widest transition-colors">Dispensar</button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Study Center Base */}
           <section className="glass-panel rounded-[2.5rem] p-6 border-emerald-500/10 shadow-2xl">
             <div className="flex items-center justify-between mb-6">
