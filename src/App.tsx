@@ -8,6 +8,7 @@ interface Log {
   id: number;
   text: string;
   type: "user" | "jarvis" | "system";
+  timestamp: string;
 }
 
 interface SiteData {
@@ -338,7 +339,8 @@ export default function App() {
   };
 
   const addLog = (text: string, type: "user" | "jarvis" | "system") => {
-    setLogs(prev => [{ id: Date.now() + Math.random(), text, type }, ...prev].slice(0, 50));
+    const time = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    setLogs(prev => [{ id: Date.now() + Math.random(), text, type, timestamp: time }, ...prev].slice(0, 50));
   };
 
   const speak = (text: string) => {
@@ -1009,7 +1011,7 @@ export default function App() {
           {/* Interaction Zone Base */}
           <div className="flex-1 flex flex-col min-h-0 glass-panel rounded-[3rem] overflow-hidden border-white/5 shadow-2xl transition-all duration-500 group-focus-within:border-purple-500/20">
             {/* Logs Area */}
-            <div className="flex-1 overflow-y-auto p-6 md:p-10 space-y-8 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-6 md:p-10 space-y-12 custom-scrollbar">
               {logs.length === 0 && (
                 <div className="h-full flex flex-col items-center justify-center gap-6">
                   <div className="w-16 h-16 bg-purple-500/10 rounded-3xl flex items-center justify-center border border-purple-500/20 animate-bounce">
@@ -1021,41 +1023,63 @@ export default function App() {
                   </div>
                 </div>
               )}
-              {logs.map((log) => (
-                <motion.div
-                  key={log.id}
-                  initial={{ opacity: 0, x: log.type === "user" ? 20 : -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className={`flex gap-5 ${log.type === "user" ? "flex-row-reverse text-right" : ""}`}
-                >
-                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-3xl flex items-center justify-center shrink-0 border-2 shadow-2xl transition-transform hover:scale-110
-                    ${log.type === "user" 
-                      ? "bg-zinc-800 border-white/10" 
-                      : log.type === "jarvis" 
-                        ? "bg-purple-600 border-purple-400" 
-                        : "bg-emerald-600/20 border-emerald-500/40"
-                    }`}
+              {logs.map((log, index) => {
+                const isNewDay = index === logs.length - 1 || log.timestamp !== logs[index + 1]?.timestamp;
+                
+                return (
+                  <motion.div
+                    key={log.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`flex flex-col ${log.type === "user" ? "items-end" : "items-start"} gap-3`}
                   >
-                    {log.type === "user" ? <Monitor className="w-5 h-5 text-zinc-400" /> : <Zap className="w-6 h-6 text-white" />}
-                  </div>
-                  <div className={`flex flex-col max-w-[85%] ${log.type === "user" ? "items-end" : ""}`}>
-                    <div className="flex items-center gap-2 mb-2 px-1">
-                      <span className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.3em]">
-                        {log.type === "user" ? "Comando Vocal" : log.type === "jarvis" ? "JARVIS CORE" : "SISTEMA INTEGRADO"}
-                      </span>
-                      <div className={`w-1 h-1 rounded-full ${log.type === 'user' ? 'bg-zinc-700' : 'bg-purple-500 animate-pulse'}`} />
+                    {/* Message Header */}
+                    <div className={`flex items-center gap-3 px-2 ${log.type === 'user' ? 'flex-row-reverse' : ''}`}>
+                      <div className={`w-8 h-8 rounded-2xl flex items-center justify-center border transition-all
+                        ${log.type === "user" 
+                          ? "bg-zinc-800 border-white/10" 
+                          : log.type === "jarvis" 
+                            ? "bg-purple-600 border-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.3)]" 
+                            : "bg-emerald-600/20 border-emerald-500/40"
+                        }`}
+                      >
+                        {log.type === "user" ? <Monitor className="w-4 h-4 text-zinc-400" /> : <Zap className={`w-4 h-4 ${log.type === 'jarvis' ? 'text-white' : 'text-emerald-400'}`} />}
+                      </div>
+                      <div className={`flex flex-col ${log.type === 'user' ? 'items-end' : 'items-start'}`}>
+                        <span className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.3em]">
+                          {log.type === "user" ? "Protocolo Criador" : log.type === "jarvis" ? "JARVIS CORE 5.0" : "LOG DO SISTEMA"}
+                        </span>
+                        <div className="flex items-center gap-2">
+                           {log.type !== 'user' && <div className={`w-1 h-1 rounded-full ${log.type === 'jarvis' ? 'bg-purple-500 animate-pulse' : 'bg-emerald-500'}`} />}
+                           <span className="text-[8px] font-bold text-zinc-700 font-mono tracking-widest">{log.timestamp}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className={`px-8 py-5 rounded-[2.5rem] text-[16px] md:text-[18px] leading-relaxed shadow-2xl border transition-all duration-300
-                      ${log.type === "user" 
-                        ? "bg-zinc-800/90 text-zinc-100 rounded-tr-none border-white/10" 
-                        : "glass-panel text-white rounded-tl-none border-purple-500/30 bg-purple-500/10 backdrop-blur-3xl ring-1 ring-purple-500/20 shadow-[0_0_50px_rgba(168,85,247,0.1)]"
-                      }`}
-                    >
-                      {log.text}
+
+                    {/* Bubble Content */}
+                    <div className={`relative max-w-[90%] md:max-w-[80%] group`}>
+                      <div className={`px-7 py-5 rounded-[2.2rem] text-[15px] md:text-[17px] leading-relaxed shadow-2xl transition-all duration-300
+                        ${log.type === "user" 
+                          ? "bg-zinc-900 text-zinc-200 rounded-tr-none border border-white/5 group-hover:border-white/10" 
+                          : log.type === "jarvis"
+                            ? "glass-panel text-white rounded-tl-none border border-purple-500/30 bg-purple-950/20 backdrop-blur-3xl ring-1 ring-purple-500/10 shadow-[0_0_40px_rgba(168,85,247,0.05)] group-hover:shadow-[0_0_60px_rgba(168,85,247,0.1)] group-hover:border-purple-500/50"
+                            : "bg-emerald-950/20 text-emerald-300 border border-emerald-500/20 px-6 py-3 rounded-2xl font-mono text-sm group-hover:bg-emerald-950/30"
+                        }`}
+                      >
+                        {log.text}
+                      </div>
+                      
+                      {/* Decorative accents for Jarvis */}
+                      {log.type === 'jarvis' && (
+                        <>
+                          <div className="absolute top-0 -left-6 w-px h-full bg-gradient-to-b from-purple-500/50 via-purple-500/10 to-transparent" />
+                          <div className="absolute top-4 -left-7 w-2 h-2 rounded-full border border-purple-500/50 animate-ping opacity-30" />
+                        </>
+                      )}
                     </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
               <div ref={chatEndRef} />
             </div>
 
